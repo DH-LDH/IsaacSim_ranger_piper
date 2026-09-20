@@ -310,6 +310,37 @@ ros2 launch piper_hw_pkg piper_real.launch.py really_enable:=false
 `arm_node`는 `detect/pre/grasp`에서만 이 토픽을 쓰므로 지금은 무해하지만, 물체를 쥔
 채로 다시 `hover`/`detect`로 들어가는 흐름을 만들면 **자기가 든 물체를 타겟으로 잡는다.**
 
+### 관절 이동(MOVE J) 단계 — 도달 확인과 자세 지정
+
+`wait`/`place_ready`/`place_home`/`place_done`은 `JointCtrl`(MOVE J)을 쓴다. 카르테시안
+구간과 달리 `ee_pose`로 도달을 잴 수 없어서, arm_node가 `/joint_states`(드라이버가 이미
+60Hz로 발행)를 구독해 목표 관절각과 직접 대조한다.
+
+- `place_joint_arrive_tol_deg` — 도달 허용오차[deg]. **기본 0 = 로그만** 찍고 판정은
+  종전처럼 시간 기준(동작 변화 없음). `[place_home 관절] 도달오차 N.NN°` 실측을 먼저
+  모으고, 정상값의 2~3배로 켤 것. 켜면 실제 도달 즉시 다음 단계로 넘어가고, 상한을
+  넘기면 `★ 도달 실패`를 찍고 진행한다(멈추지 않음).
+- `place_home_q_deg`(기본 SEARCH_Q) → `place_done_q_deg`(기본 `[0,-1.5,-5,-8,28.5,5]`,
+  2026-09-20 손으로 잡아 실측). **`place_home`에서 SEARCH_Q 도달을 확인한 뒤
+  `place_done`에서 최종 자세로 간다.** 예전 `place_done`은 아무 명령도 안 보내고
+  `place_home`의 마지막 명령을 물려받기만 했는데, 이제 자기 자세를 직접 지령한다
+  (드라이버의 `JOINT_HOLD_PHASES`에 추가).
+- `place_done_settle_steps`(실물 1200=20초) — SEARCH_Q에서 관절 최대 85° 이동이라
+  `place_home`과 같은 상한(10초)으로는 모자란다.
+- **★ 직접 관절 지령이라 도달/간섭 검사가 없다.** 자세를 바꿀 땐 `read_arm_joint.py`로
+  실측한 값을 쓰고, 첫 실행은 그 큰 이동을 눈으로 지켜볼 것.
+
+**`read_arm_joint.py`** — 지금 관절각을 도 단위로 읽는다(`set_arm_joint.py`의 반대).
+```
+# 터미널1: 드라이버만(모션 명령 없음)
+ros2 run piper_hw_pkg piper_driver_node --ros-args -p really_enable:=false -p can_name:=can_piper
+# 터미널2
+python3 read_arm_joint.py -w      # 0.5초마다, 손으로 움직이며 볼 때
+```
+손으로 움직이려면 토크가 빠져 있어야 한다. `really_enable:=false`는 새 명령을 안 보낼
+뿐 이전 enable을 풀지 않으므로, 안 움직이면 팔 전원을 껐다 켤 것. **토크가 빠진 팔은
+처지므로 반드시 받친 상태에서** 움직일 것.
+
 ### 2026-09-20 무인 완주(step_confirm=false) — 66초, 전 구간 도달오차 한 자리 mm
 
 hover 9.5 / pre 9.5 / 파지 0.9(z +0.8) / lift 8.3 / place_hover 9.6 / place 1.0 /
