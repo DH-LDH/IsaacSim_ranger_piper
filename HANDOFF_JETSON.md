@@ -17,10 +17,39 @@
   단 `arm_node.py`에 파라미터 하나(`use_marker_place`, 기본값 False=sim 그대로)를
   추가해 실물에서는 이 값을 `true`로 켜 "두 번째 아르코 마커로 place 위치 인식" 경로를
   쓰도록 했다.
-- **아직 실제 CAN 연결로 테스트한 적이 없다.** 시뮬레이션 PC에는 CAN 하드웨어도
-  `piper_sdk`도 없어서, API 자체는 agilexrobotics의 공식 `piper_sdk`(pip) 소스코드를
-  직접 pip install해 함수 시그니처/반환 객체 구조까지 확인하고 작성했지만(추측 아님),
-  실제 팔에 물려서 돌려본 적은 없다. **여기서 처음 연결 테스트를 한다.**
+- **2026-09-15, Jetson에서 `really_enable:=false`로 첫 연결 테스트 완료.** `/joint_states`
+  60Hz, `/arm/ee_pose_body`, `/piper/gripper_feedback` 전부 실측값 정상 발행 확인.
+  이 과정에서 나온 버그 2건 수정함(둘 다 이 저장소에 반영돼 커밋 대상):
+  `piper_driver_node.py`의 `GetArmStatus().arm_status`는 상태값이 아니라 한 겹 더 감싼
+  객체라 `.arm_status.arm_status`로 접근해야 함(고침). `vision_node.py`의 `_make_detector()`가
+  구버전 OpenCV(Jetson 기본 4.5.4)에서 무조건 죽던 것도 고침(신/구 API 분기 안으로 이동).
+  `really_enable:=true` 실제 모션 검증은 아직 안 함.
+- **2026-09-17, `really_enable:=true`로 그리퍼만 고립 테스트하려다 팔이 실제로 움직임.**
+  원인: `arm_phase` 기본값 `"wait"`가 `JOINT_HOLD_PHASES`에 포함돼 있어서, `arm_node` 없이
+  `piper_driver_node`만 띄워도 매 틱마다 `SEARCH_Q`로 `JointCtrl`이 나감. `enable_arm_motion`
+  파라미터(기본값 True) 추가해서 고립 테스트 시 `-p enable_arm_motion:=false`로 끄면 팔은
+  안 움직이고 그리퍼 명령(`GripperCtrl`)만 통과되게 고침.
+- **2026-09-17, 그리퍼 실물 검증 중 발견한 필수 초기화 2건(`piper_driver_node.py`의
+  `EnablePiper()` 직후에 이미 반영해둠) — 이거 없이 순정 `piper_sdk`만으로 테스트해도 똑같이
+  막힘, 우리 코드 버그 아니었음:**
+  1. `EnablePiper()`로 축별 enable만 해서는 실제 모션이 하나도 안 나감 — `MotionCtrl_2(0x01,
+     move_mode, speed, 0)`로 `ctrl_mode`를 "CAN 명령 제어 모드(0x01)"로 올려야
+     `JointCtrl`/`EndPoseCtrl`/`GripperCtrl`이 전부 실행됨(안 올리면 enable 상태 피드백은
+     정상으로 보이는데 명령은 전부 씹힘 — status_code로는 구분 안 됨).
+  2. 그리퍼는 추가로 `GripperTeachingPendantParamConfig(100, 70, 1)`(최대 행정 70mm 설정)를
+     한 번 안 해주면 실측 최대 개구부가 약 49mm로 줄어든 채 동작함(70mm 명령해도 거기서
+     멈춤, 토크는 한계치 안 걸림 — 손으로는 더 벌어지는 것도 확인함, 즉 기계적 한계가
+     아니라 펌웨어 설정 문제였음). 영점(`set_zero=0xAE`)은 이 문제와 무관— 없어도
+     동작 자체는 됨.
+- **2026-09-18, 실물 파지 성공.** 원인은 손목캠 장착 각도(pitch) 12.5° 오차 + 좌표계
+  기준점 상수 14mm 불일치 두 가지였다. 캘리브레이션 값은 이미 기본값에 반영돼 있어
+  `ros2 launch piper_hw_pkg piper_real.launch.py really_enable:=true move_spd_rate_ctrl:=5
+  step_confirm:=true`만으로 동작한다. 자세한 내용은 4절 마지막, 재발 방지 지침은 6절.
+- **2026-09-17, `grippers_effort`가 닫는 방향(저항) 쪽으로는 음수로 나옴**(여는 쪽은 양수로
+  확인함) — `piper_gripper_node.py`의 `_on_feedback`이 부호 신경 안 쓰고 크기(`abs`)만
+  쓰도록 고침. 안 고쳤을 땐 `CONTACT_F_MIN` 비교(`F_con>=0.3`)가 음수라 항상 실패해서
+  실제로 세게 잡고 있어도 "접촉 미감지"로 뜨고, SMC도 계속 더 닫으라고만 명령해서
+  펌웨어 토크 한계(2.0N·m)까지 밀어붙였음.
 
 ## 1. 사전 준비물 (Jetson 쪽)
 
@@ -51,14 +80,43 @@ colcon build --symlink-install
 source install/setup.bash
 ```
 
+`piper_description/urdf/piper_description.xacro`의 `<gazebo>...</gazebo>` 블록(gazebo_ros2_control 플러그인)은 `piper_gazebo` 패키지가 없으면 xacro 처리가 실패하니 통째로 지울 것 — 실물 launch엔 필요 없는 블록.
+
 ## 3. CAN 활성화
 
+PiPER는 USB-CAN 동글(gs_usb/candleLight 계열, lsusb에 `1d50:606f`)로 연결한다 — Jetson 보드 내장 CAN(mttcan, 보통 can0)이 아니다. NVIDIA L4T 커널엔 `gs_usb.ko`가 기본으로 없어서 직접 빌드해야 한다(한 번 하면 재부팅 전까지 유지):
+
 ```bash
-cd src/piper_hw_pkg   # 또는 piper_sdk 저장소의 스크립트를 따로 받아도 됨
-bash find_all_can_port.sh   # 없으면 pip show piper_sdk로 설치 경로 확인 후 그 안의 스크립트 사용
-bash can_activate.sh can0 1000000
-ifconfig   # can0가 보이는지 확인
+mkdir -p ~/gs_usb_build && cd ~/gs_usb_build
+curl -sL -o gs_usb.c https://raw.githubusercontent.com/torvalds/linux/v5.15/drivers/net/can/usb/gs_usb.c
+printf 'obj-m += gs_usb.o\nKDIR := /lib/modules/$(shell uname -r)/build\nall:\n\t$(MAKE) -C $(KDIR) M=$(PWD) modules\n' > Makefile
+make
+sudo insmod gs_usb.ko   # 재부팅마다 다시 해줘야 함(영구화 안 했으면)
 ```
+
+**주의**: `can0`/`can1` 이름은 Jetson 내장 mttcan과 USB 동글 중 어느 쪽 드라이버가 먼저
+로드되냐에 따라 **부팅마다 뒤바뀔 수 있다**(실제로 한 번 바뀌는 걸 확인함 — mttcan이
+`can1`을 차지하고 USB 동글이 `can0`가 된 적 있음). 그래서 udev 규칙으로 USB 동글을
+`can_piper`라는 고정 이름에 묶어뒀다:
+
+```bash
+# /etc/udev/rules.d/80-can-piper.rules (시리얼 넘버로 이 동글만 특정)
+SUBSYSTEM=="net", ACTION=="add", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="606f", ATTRS{serial}=="004900345443570F20393433", NAME="can_piper"
+```
+
+다른 동글로 교체하면 시리얼 값을 `udevadm info -a -p /sys/class/net/<현재이름> | grep ATTRS{serial}`로
+다시 확인해서 갱신할 것. 규칙 적용 후:
+
+```bash
+sudo udevadm control --reload-rules
+# 동글을 뽑았다 다시 꽂거나 재부팅해야 새 이름이 적용됨
+ip -br link show type can   # can_piper가 보여야 함
+sudo ip link set can_piper down
+sudo ip link set can_piper type can bitrate 1000000
+sudo ip link set can_piper up
+```
+
+`piper_real.launch.py`/`piper_driver_node.py` 기본 `can_name`은 `can_piper`로 맞춰뒀다.
 
 ## 4. 첫 실행 — 절대 처음부터 `really_enable:=true`로 켜지 말 것
 
@@ -79,17 +137,14 @@ ros2 launch piper_hw_pkg piper_real.launch.py really_enable:=false
   값이 전혀 안 나오거나 이상하면(0 고정 등) CAN 연결/펌웨어 버전 문제일 가능성이 큼 —
   이 단계에서 반드시 잡고 넘어갈 것.
 
-**2단계: `piper_driver_node.py`의 `_quat_to_rpy_deg()` 변환이 맞는지 검증**
+**2단계: `piper_driver_node.py`의 `_quat_to_rpy_deg()` 변환 검증 — ✅ 2026-09-17 완료**
 
-- 코드에 "★검증 필요"로 표시해둔 부분 — 쿼터니언을 `(RX,RY,RZ)` Euler로 바꾸는 합성
-  순서(`R=Rz(yaw)@Ry(pitch)@Rx(roll)` 가정)가 실제 PiPER 펌웨어의 관례와 같은지
-  문서만으로 확인 못 했다.
-- 검증법: `really_enable:=true`로 딱 한 번, **팔 주변에 장애물/사람 없는 상태**에서
-  낮은 속도(`move_spd_rate_ctrl` 기본 20)로 `arm_node`를 통하지 않고 `piper_sdk`를
-  직접 열어 알고 있는 자세(예: 완전 수직 하강 자세) 하나를 `EndPoseCtrl`로 보내보고,
-  `GetArmEndPoseMsgs()` 피드백이 기대한 자세와 맞는지 눈으로/로그로 대조.
-- 안 맞으면 `piper_driver_node.py`의 `_quat_to_rpy_deg()`만 고치면 된다(호출부는
-  건드릴 필요 없음).
+- `piper_driver_node`를 끈 상태(동시에 CAN에 명령 보내는 프로세스가 둘이면 서로
+  덮어써서 헛갈림 — 실측으로 확인함)에서 `piper_sdk`로 직접 `EndPoseCtrl`을 보내
+  pitch만 +10° 바꿔봄. 피드백이 `(RX+180, 180-RY, RZ+180)` 형태(오일러각 180도
+  대칭 이중해)로 나왔는데, 이게 정확히 `R=Rz(yaw)@Ry(pitch)@Rx(roll)` 가정에서
+  나오는 이중해 패턴과 오차 0.02° 이내로 일치 — 변환식 맞는 걸로 확인. 코드의
+  "★검증 필요" 표시 제거함.
 
 **3단계: 그리퍼 물리 스펙 확정**
 
@@ -103,12 +158,111 @@ ros2 launch piper_hw_pkg piper_real.launch.py really_enable:=false
 - `piper_eih_camera_node.py`의 `K_PLACEHOLDER`(초점거리 500px 가정) — 실제 카메라로
   체스보드 캘리브레이션(OpenCV `cv2.calibrateCamera`) 해서 갱신할 것. 지금 값 그대로면
   ArUco pose(특히 z, 거리)가 부정확하다.
-- `piper_hw_pkg/urdf/eih_cam_mount.xacro`의 `<origin xyz="0 0 0" rpy="0 0 0"/>` —
-  손목캠을 link6에 실제로 장착한 뒤 위치/자세를 실측(또는 hand-eye calibration)해서
-  채울 것. 지금은 카메라가 link6 원점에 있다고 거짓 가정하고 있다.
+- 손목캠 TCP 오프셋은 `piper_eih_camera_node`의 ROS 파라미터(`cam_tcp_offset_x/y/z`,
+  `cam_tcp_offset_pitch_deg`)로 관리한다(예전엔 xacro에 박아뒀었는데 튜닝 편의상 옮김,
+  `link6→eih_cam` static TF를 코드에서 직접 발행). 기본값은 2026-09-15 실측+마커
+  교차검증값(x=-0.085, y=0, z=0.026) + 2026-09-17 전자각도계 실측 pitch=40deg(그리퍼
+  끝단이 시야 중앙 근처에 오는 것도 마커로 재검증함). `link1..link6` 체인 자체는
+  여전히 `piper_description.xacro`+`robot_state_publisher`가 joint_states로 갱신한다.
 - `common_pkg/step22_common.py`의 `PLACE_CENTER_BODY_GUESS`(자리표시자 `(0.20, KEEP_DIST,
   OBJ_CENTER_BODY[2])`) — 두 번째 마커(place 목표)를 대략 어디에 둘지 실제 배치에 맞게
   갱신할 것. `place_hover`가 이 값으로 먼저 접근한 뒤 마커 재검출로 정밀 보정한다.
+- **2026-09-17 발견: `arm_node.py`의 `_grasp_point()`/`_place_point()`/detect 게이트가
+  `BODY_LINK_WORLD_Z`(=0.277, sim에서 body_link가 world보다 높은 만큼)를 더하는데, 실물은
+  `body_link=world=팔 베이스`라 이 오프셋이 없어야 함 — 그대로 두면 Z가 27.7cm 어긋난
+  목표로 EndPoseCtrl이 나감.** `arm_node.py`에 `body_link_world_z` 파라미터 추가(기본값은
+  sim과 동일하게 0.277 유지, `piper_real.launch.py`에서 0.0으로 오버라이드)로 고침.
+- **2026-09-17 발견(더 큰 원인): `_on_lock()`의 hover 목표 계산(`OBJ_CENTER_BODY - HOVER_APPROACH_DIR×...`)은
+  위 변환조차 안 하고 `OBJ_CENTER_BODY`(world 절대높이 상수)를 그대로 썼음** — 실측(팔 베이스
+  지면 38cm, 물체 지면 25cm → body_link 기준 -0.13m)으로 역산하면 원래 목표(z=0.508m, 팔
+  베이스보다 훨씬 위)가 올바른 목표(z=0.143m)보다 36cm나 높았던 것 — 첫 hover 시도가
+  `TARGET_POS_EXCEEDS_LIMIT`로 반복 실패한 주 원인으로 추정됨. `obj_expected_x/y/z_body`
+  파라미터 3개 추가해서 hover 목표/detect 게이트가 이 값을 직접 쓰도록 고침(sim 기본값은
+  기존 계산과 수치 동일, 실물은 `piper_real.launch.py`에서 실측값(-0.13, 0.40)으로
+  오버라이드). **아직 실물에서 재검증은 안 함** — 다음 hover 재시도 때 이 좌표로 확인할 것.
+- **2026-09-17 확인 완료(가장 근본 원인): body_link의 X/Y축이 통째로 sim 관례랑 어긋나
+  있었음.** sim은 `ARM_BASE_YAW_DEG=90`(팔이 AMR 몸체 기준 90도 돌아서 장착)이라
+  body_link의 Y축이 전진방향인데, `piper_fake_amr_node.py`가 `body_link↔world`를
+  identity로 발행하고 있어서 실물에선 이 90도가 반영이 안 되고 있었음. 추가로
+  `vision_node.py`의 `_on_eih_image`가 solvePnP 결과에 `diag(1,-1,-1)`(sim의 USD
+  카메라 y/z 부호 보정용)을 곱하는데, 실물 `eih_cam`(OpenCV 관례로 직접 정의)엔 이게
+  불필요해서 이중으로 틀어져 있었음. 두 가지 다 고치고 HOVER_Q_VERIFIED 실측 EndPose와
+  정방향 기구학 역산으로 교차검증(오차 <1cm)해서 확인함:
+  - `piper_fake_amr_node.py`: `body_link→world` TF 회전을 identity 대신 `ARM_BASE_YAW_DEG`
+    반영하도록 수정.
+  - `vision_node.py`: `eih_axis_flip` 파라미터 추가(기본 True=sim 그대로, 실물은
+    `piper_real.launch.py`에서 `false`).
+  - `piper_driver_node.py`: `arm_node`가 body_link 관례로 계산한 `cartesian_target`
+    XY를 `EndPoseCtrl`에 넣기 전에 native로, `GetArmEndPoseMsgs()` 피드백을
+    `/arm/ee_pose_body`에 싣기 전에 body_link로 변환하는 `_body_to_native_xy`/
+    `_native_to_body_xy` 추가(`_tick()`/`_publish_feedback()`에 적용).
+  **이 세 가지가 다 맞아야 hover/detect/grasp 전체가 앞뒤가 맞는다** — 하나라도 빠지면
+  이번처럼 목표가 90도 돌아간 방향으로 나가서 fault/낙하로 이어질 수 있음.
+- **2026-09-17 추가 발견: yaw(RZ)도 같은 회전보정이 빠져있었음.** 위 세 가지를 고치고
+  `step_confirm` 모드로 hover까지 실행했더니 위치는 HOVER_Q_VERIFIED 실측값과 거의
+  일치했는데(native X=0.40 근처) 그 직후 `TARGET_POS_EXCEEDS_LIMIT`가 뜸 — hover의
+  계산된 yaw(-90°)가 실측 hover 자세의 RZ(180°)랑 90도(=`ARM_BASE_YAW_DEG`) 차이나서,
+  위치는 맞는 곳으로 가면서 손목이 무리하게 yaw를 맞추려다 한계 초과한 것으로 추정.
+  `piper_driver_node.py`의 `_tick()`에서 `rz = rz_body - ARM_BASE_YAW_DEG`로 보정
+  추가함. **아직 재검증 전** — 다음 hover 재시도 때 fault 없이 도달하는지 확인할 것.
+
+- **2026-09-17 저녁 — 카메라 광축 롤(roll) 누락 발견/수정.** eih_cam TF가 link6 축과 나란하다고
+  가정했는데 실제 카메라는 광축 기준 90° 돌아가 장착돼 있었음. 그래서 이미지 좌우가 로봇
+  전후로 해석돼 좌우 8cm씩 엉뚱하게 움직였음. `cam_tcp_offset_roll_deg`(기본 -90) 추가로
+  해결 — 파지 좌우오차 81.7mm → **15.3mm**, detect mk x는 +0.089 → **-0.006**(거의 정중앙).
+- **2026-09-17 저녁 — 그리퍼가 반쯤 닫힌 채로 파지를 시작하던 문제.** `SMC_ALPHA_0=0.5`면
+  개구부 30mm에서 시작해 물체를 감싸지 못함 → **0.0(완전 개방)으로 변경**. 추가로
+  `piper_gripper_node`가 기동 3초 뒤 자동으로 한 번 열도록 함(이전 파지의 닫힌 상태로 시작 방지).
+- **2026-09-17 저녁 — 남은 블로커: 하강 도달 한계.** 전방 0.40m + 그리퍼 수직 자세에서
+  **z≈0.15 아래로는 팔이 안 내려감**(4회 재현: 0.148 / 0.151 / 0.159에서 정지, 0.137 명령 시
+  `TARGET_POS_EXCEEDS_LIMIT`). 파지 목표가 그보다 낮게 잡히면 도달 실패 → 헛집음.
+  다음 시도: **물체를 7~10cm 높이거나 베이스 쪽으로 10cm 당겨서** 파지점이 z≈0.15 이상이
+  되게 할 것. `ee_grip_offset` 파라미터(기본 0.135, link6→파지점 거리)도 이 높이에 직접
+  영향을 주니 같이 조정할 것 — 0.25로 올리면 목표가 13cm 위로 올라감.
+- 2026-09-17 저녁 기준 각 축 오차: 좌우 15mm / 전후 23mm / **높이 126mm(위 한계 때문)**.
+
+
+- **2026-09-18 — 파지 실패의 근본 원인 2건 확정, 실물 파지 성공.**
+  - **원인 ① 손목캠 외부파라미터 pitch 오차 (주원인).** `cam_tcp_offset_pitch_deg`가
+    40.0(전자각도계 실측)이었는데 실제는 **27.5°**. 회전 오차는 *거리에 비례하는* 위치
+    오차(거리×sin12.5°≈22%)를 만든다 — 50cm에서 11cm. 더 나쁜 건 오차가 카메라 자세에
+    의존한다는 점으로, 하강 중 재검출마다 목표가 움직이고 팔이 그걸 쫓으면서 **양의
+    피드백**이 걸려 목표가 150mm 발산했다(팔은 74mm 뒤처진 채 영원히 수렴 못 함).
+  - **원인 ② 좌표계 기준점 불일치 (상수 14mm).** 비전은 URDF `link6`(FK)를, 모션 명령은
+    펌웨어 `EndPoseCtrl`의 기준점을 쓰는데 두 점이 툴축 방향으로 어긋나 있다. `ee_grip_offset`
+    **0.135 → 0.121**로 흡수. 물체 높이를 바꿔 반복 측정해 거리·자세 무관한 상수임을 확인했다.
+  - **진단 방법(핵심).** *팔을 정지시킨 상태의 관측만* 썼다 — 움직이는 데이터는 추종
+    오차와 캘리브레이션 오차가 섞여 구분이 안 된다. ①정지 16샘플로 카메라→몸체 변환을
+    강체정합(잔차 0.5mm) → 소프트웨어 버그 배제, ②기대치와의 오차 벡터가 광축과 **87°**
+    (수직)임을 확인 → 거리/스케일 오차가 아닌 **지향 오차**로 범위 축소, ③마커 고정 +
+    팔 자세만 9회 변경해 자세 간 편차를 최소화하는 외부파라미터 최적화(`eih_cam_calib.py`)
+    → 편차 10.4mm → 3.8mm. **마커의 실제 위치를 몰라도 되는 방법**이라 별도 계측 장비가 필요 없다.
+  - **같이 고친 소프트웨어 결함 4건:**
+    1. `arm_node.py` PRE 재검출 수용 판정이 *직전값* 대비(`|g2-ml_grasp|<=60mm`)라
+       2mm짜리 보정 787회가 150mm로 무한 누적됐다 → **anchor(최초검출) 대비**로 변경.
+       이것 때문에 grasp 단계에서는 반대로 448/448 전부 기각됐다.
+    2. 물리도달 대기 상한 90/120스텝(1.5/2초)은 `move_spd_rate_ctrl:=5`에 너무 짧아
+       팔이 도착하기 전에 "그냥 진행"했다 → **300스텝(5초)**.
+    3. 그리퍼 닫기 명령이 grasp 단계 *끝*에서 나가 `step_confirm`의 grip 게이트보다
+       먼저 닫혔다 → **grip 단계 첫 틱으로 이동**. 이제 Enter 전엔 안 닫힌다.
+    4. `set_arm_joint.py`가 publish 직후 바로 종료해서 디스커버리가 늦으면 명령이 통째로
+       사라졌다 → 구독자와 매칭될 때까지 대기 후 publish.
+  - **추가된 도구/인자:**
+    - `eih_cam_calib.py` — 손목캠 외부파라미터 캘리브레이션. 샘플은 `eih_calib_samples.npz`로
+      저장되고 `--load`로 재분석된다. **거리를 150/250/400mm로 흩어야** pitch·병진·마커크기가
+      분리된다(거리가 한 곳에 몰리면 scale이 퇴화해로 빠진다 — 경고가 뜬다).
+    - `vision_node`의 `eih_debug_view` → `/vision/eih_debug_image`. **파이프라인이 실제로
+      쓰는 검출/포즈를 그대로 그린다**(별도 `eih_marker_debug_node`는 자체 검출이라 값이 다를 수 있음).
+      런치가 `rqt_image_view`까지 같이 띄운다(`debug_view:=false`로 끔).
+    - `[진단-eih]` 로그 2초마다 — `d=`(렌즈~마커 거리)와 발행되는 `body=`가 한 줄에 나온다.
+    - `step_confirm.py`가 `/arm/step_wait`로 **어느 단계를 기다리는지** 표시.
+    - 런치 인자: `arm`(false면 arm_node 제외 → `set_arm_joint.py`로 관절 직접 지령 가능),
+      `cam_tcp_offset_*` 5종, `ee_grip_offset`, `approach_dist`, `grasp_depth_extra`,
+      `grasp_z_below_anchor_max`, `pre_redetect`, `grasp_eih_track`, `debug_view`.
+  - **★ 위 2026-09-17 저녁 항목의 "`ee_grip_offset`을 0.25로 올려라"는 조언은 폐기한다.**
+    그 값은 목표 높이를 밀어 올리는 임시방편이었고, 실제 원인은 pitch 오차였다. 현재
+    확정값은 **0.121**이다. 같은 항목의 "z≈0.15 아래로 안 내려감" 블로커는 현재 설정에서
+    파지가 성공하므로 실질적으로 해소됐으나, 도달 한계 자체를 따로 규명하지는 않았다.
 
 ## 5. 알려진 한계 (지금 범위에서 일부러 안 건드린 것)
 
@@ -116,13 +270,76 @@ ros2 launch piper_hw_pkg piper_real.launch.py really_enable:=false
   v1(AMR 없음)에서는 사실상 무력화된다** — `chassis_pose`가 안 들어오니
   `verify_low_hits`가 절대 안 늘어나 관찰 창이 끝나면 그냥 "성공"으로 흐른다. 지금은
   운용자가 눈으로 확인하는 수밖에 없다. 대체 판정(그리퍼 접촉여부 기반 등)은 다음 과제.
+  **2026-09-18 재확인: 여전히 미해결이고, 이번 디버깅을 어렵게 만든 가장 큰 요인이었다.**
+  헛집어도 매번 "성공"으로 보고되니 시스템이 실패를 실패로 알려주질 않았다. `arm_node`는
+  이미 `/gripper/done`으로 접촉 결과(`grip_contact_result`)를 받고 있으니 그걸 판정에
+  쓰는 쪽으로 바꾸는 게 가장 짧은 길이다.
   - `EndPoseCtrl(...)` 예시는 `piper_sdk` 데모(`piper_ctrl_moveL.py` 등)에 있음 — 참고할 것.
+- **손목캠 픽 마커 경로에 재투영 오차 게이트가 없다.** 차체캠 경로는 `REPROJ_MAX=3.0px`로
+  거르는데(`vision_node._on_chassis_image`), `_on_eih_image`의 픽 마커는 무조건 발행한다.
+  2026-09-17 로그에 `rep=7.42px`짜리 포즈가 그대로 파지점에 들어간 사례가 있다. 근접
+  구간에서 검출률이 떨어질 때(60%까지 내려간 적 있음) 노이즈가 그대로 새는 경로다.
 - AMR(Ranger Mini) 통합, 벨트 추종은 이번 범위 밖(팔 단독 pick&place).
 - `piper_driver_node.py`는 종료 시 `DisableArm()`을 자동 호출하지 않는다(브레이크
   미보유 축이 있으면 무동력 낙하 위험 — 문서상 근거 불충분해 마지막 자세 유지가 기본).
   비상정지가 필요하면 `piper_sdk`의 `EmergencyStop(0x01)`을 별도로 호출할 것.
+- **★안전 절차: `EnablePiper()`/`EnableArm()`을 부르는 모든 시점(최초 기동, fault 복구
+  후 재인에이블, 프로세스 재시작 등) 직전에 팔을 손으로 받치고 시작할 것.** 2026-09-17
+  실기에서 최소 2회 재현 확인 — 인에이블 직후 짧은 순간 토크가 안 걸려 처지는 현상이
+  있음(브레이크 없는 축 추정). fault(`TARGET_POS_EXCEEDS_LIMIT` 등) 복구 시에도 동일하게
+  적용됨 — `MotionCtrl_1(0x02, 복구)` 직후 반드시 손으로 받치고 진행.
 
-## 6. 연락할 파일
+## 6. 코드 수정 시 참고 (2026-09-18 디버깅에서 얻은 것)
+
+이 절은 "다음에 또 파지가 빗나갈 때" 같은 길을 두 번 헤매지 않으려고 적어둔다.
+
+**1. 파라미터의 성격을 구분할 것 — 오차를 설계값에 흡수시키지 말 것.**
+`grasp_depth_extra`는 "물체를 얼마나 깊이 물지"라는 **설계값**(기준: 물체 높이/2)이고,
+`ee_grip_offset`은 체인 전체의 **상수 편향**이다. 파지가 얕다고 `grasp_depth_extra`를
+키우면 당장은 잡히지만 물체 높이가 바뀌는 순간 다시 틀어진다. 상수 편향은 반드시
+`ee_grip_offset`에 넣을 것. **판별법: 물체 높이를 바꿔 두 번 재본다. 같은 오차면 상수
+편향(=`ee_grip_offset`), 달라지면 비전 캘리브레이션이 아직 안 끝난 것.**
+
+**2. `ee_grip_offset`은 물리적 손가락 길이가 아니다.** "EndPoseCtrl 명령 기준점 → 손끝"
+거리이고, 펌웨어 EndPose 기준점과 URDF `link6` 원점의 불일치까지 합쳐져 있다. 그래서
+URDF의 joint7 장착점(135.8mm)보다 짧은 게 정상이다 — **"값이 이상하다"고 되돌리지 말 것.**
+
+**3. 진단은 팔을 세워두고 한다.** 움직이는 로그는 추종 오차·캘리브레이션 오차·재검출
+드리프트가 전부 섞여 있어 원인 분리가 불가능하다. `really_enable:=false`로 띄우면
+변환이 상수가 되어 강체정합으로 파이프라인 자체의 무결성을 먼저 검증할 수 있다.
+
+**4. 오차 벡터와 광축의 각도를 먼저 본다.** 이 한 번의 계산이 원인 범위를 절반으로 줄인다.
+- **광축과 나란함** → 거리(스케일) 오차 = 마커 크기, `fx`
+- **광축과 수직** → 지향(회전) 오차 = `cam_tcp_offset_pitch_deg` / `_roll_deg`
+- **거리와 무관하게 일정** → 병진 오차 = `cam_tcp_offset_x/y/z`, 또는 프레임 불일치
+
+**5. 재검출 수용 판정은 항상 anchor(최초 검출) 대비로 짤 것.** 직전값 대비로 하면 각
+보정이 임계값 아래라도 무한히 누적된다(실제로 2mm×787회 = 150mm 발산). 목표를 실시간
+추종시킬 때는 "한 번에 얼마나 뛰는가"가 아니라 "출발점에서 얼마나 멀어졌는가"를 막아야 한다.
+
+**6. `/arm/status`는 driver와의 계약이다.** `piper_driver_node`가 이 토픽의 phase로
+JointCtrl/EndPoseCtrl을 고르므로, `step_confirm` 게이트 중에는 일부러 발행을 멈춰
+이전 phase를 유지시킨다(안 그러면 둘 다 못 보내는 공백이 생겨 팔이 멈춤). 단계 정보를
+외부에 알릴 일이 생기면 **별도 토픽**을 쓸 것(`/arm/step_wait`가 그렇게 추가됐다).
+
+**7. 좌표계가 세 개다. 새 계산을 넣을 때 어느 것인지 명시할 것.**
+- `body_link` — `vision_node`/`arm_node`가 쓰는 기준(실물에서는 팔 베이스=world)
+- native — `EndPoseCtrl`의 고유 좌표. `_body_to_native_xy`로 `ARM_BASE_YAW_DEG`만큼 회전. yaw(RZ)도 같은 보정 필요
+- URDF `link6` — TF/FK 기준. 손목캠이 여기 붙어 있어 비전은 이걸 탄다. **EndPose 기준점과 다르다**(위 2번)
+
+**8. 실기 검증은 `step_confirm:=true`로.** 특히 `grip` 게이트에서 멈춘 채로 손끝과 물체
+윗면의 간격을 자로 재면, 그 숫자 하나로 원인이 갈린다(1번 판별법). 그리퍼는 Enter 전엔
+닫히지 않으므로 안전하게 잴 수 있다.
+
+**9. 측정값은 화면이 아니라 로그로 남길 것.** rqt 오버레이는 눈으로 옮겨 적어야 해서
+기록이 안 남는다. `[진단-eih]`처럼 주기적으로 콘솔에 찍으면 런치 로그를 그대로 붙여
+나중에 역산할 수 있다 — 이번 원인 규명도 저장된 로그 16줄에서 나왔다.
+
+**10. 캘리브레이션 샘플은 반드시 저장할 것.** 캡처는 비싸고(팔 자세 바꿔가며 수 분),
+분석은 싸다. `eih_cam_calib.py`는 `eih_calib_samples.npz`로 저장하고 `--load`로 재분석한다.
+한 번은 저장을 안 해서 9자세를 통째로 다시 잡아야 했다.
+
+## 7. 연락할 파일
 
 - 설계/좌표계/제어식 전체 설명: [PiPER 엔드이펙터 접근·제어 알고리즘](이 vault 노트,
   시뮬레이션 PC의 `/home/da/Documents/tetra/`에 있음 — 필요하면 내용만 복사해서 가져올 것)
