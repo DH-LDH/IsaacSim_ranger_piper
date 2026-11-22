@@ -30,50 +30,50 @@ def band(x, fs, lo=5.0, hi=10.0):
 
 md = ["# 시뮬레이션 결과 요약 (make_figs.py가 생성)\n"]
 
-# ---------------- 그림 1: 고정 베이스 검증 ----------------
+# ---------------- 그림 1: 고정 베이스 대조 ----------------
+# (가) 재생: 실측 엔코더 기록을 모터 쪽에 그대로 넣음(exp3 replay)  (나) 서보 모형: 명령을 서보 모형에 넣음(exp1)
 sim = rd(O + "/exp1_fixed.csv")
 real = rd(REAL + "/c1_stops.csv")
+rp = rd(O + "/exp3_replay_c1.csv")
+for r in rp:
+    r["v"] = float(r["cond"].split("_v")[1].split("_")[0]); r["sim"] = r["stop_pitch_5_10"] * CAM; r["real"] = float(r["real_gyro_rms"])
+sp = [5, 10, 15]
 fig, ax = plt.subplots(1, 3, figsize=(7.2, 2.1), gridspec_kw={"width_ratios": [1.35, 1, 1]})
 d = np.load(O + "/exp1_ts_v10_d+10_none.npz"); t = d["t"] - float(d["t0"])
 ax[0].plot(t, np.degrees(d["vm"]), color="#1f77b4", lw=0.9, label="motor-side joint vel. [deg/s]")
 ax[0].plot(t, np.degrees(d["gyro"]) * CAM, color="#d62728", lw=0.9, label="EE pitch rate [deg/s]")
 ax[0].set_xlim(-1.3, 1.5); ax[0].set_xlabel("time from encoder stop [s]"); ax[0].set_title("(a) Sim: J2 10 deg/s x 10 deg, stop", fontsize=8); ax[0].legend(fontsize=6, loc="lower left")
-sp = [5, 10, 15]
-rs = {v: [abs(r["gyro_rms"]) for r in real if r["speed_dps"] == v] for v in sp}
-ss = {v: [r["rms"] * CAM for r in sim if r["speed"] == v and r["shape"] == "none"] for v in sp}
-bp = ax[1].boxplot([rs[v] for v in sp], positions=np.array(sp) - 0.9, widths=1.4, patch_artist=True, showfliers=False, medianprops={"color": "k"})
-for b in bp["boxes"]: b.set_facecolor("#bbbbbb")
-for v in sp:
-    ax[1].scatter([v + 0.9] * len(ss[v]), ss[v], s=10, color="#d62728", zorder=3)
-ax[1].set_xticks(sp); ax[1].set_xticklabels(sp); ax[1].set_xlabel("joint speed [deg/s]"); ax[1].set_ylabel("residual 5-10 Hz rms [rad/s]")
-ax[1].set_title("(b) Real (box, n=30 each) vs sim (dots)", fontsize=8)
-# 입력 성형: 실측(11/18) 대 시뮬레이션(모드 일치 / 6.3 Hz / 6.06 Hz)
-shp = {}
-for tag, lab in (("", "7.0"), ("_ks0.81", "6.3"), ("_ks0.735", "6.06")):
-    rows = rd(O + f"/exp1_fixed{tag}.csv")
-    for v in (10, 15):
-        base = [r["rms"] for r in rows if r["speed"] == v and r["dist"] == 10 and r["shape"] == "none"][0]
-        for s_ in ("zv", "zvd"):
-            shp[(lab, v, s_)] = [r["rms"] for r in rows if r["speed"] == v and r["shape"] == s_][0] / base
-realshape = {(10, "zv"): 0.42, (15, "zv"): 0.72, (10, "zvd"): 0.28, (15, "zvd"): 0.29}   # FW191_D_LOG 5.2
-x = np.arange(2); w = 0.2
-ax[2].bar(x - 1.5 * w, [np.mean([realshape[(v, s_)] for v in (10, 15)]) for s_ in ("zv", "zvd")], w, color="#bbbbbb", label="real (mode 6.0-6.6 Hz)")
-for i, lab in enumerate(("7.0", "6.3", "6.06")):
-    ax[2].bar(x + (i - 0.5) * w, [np.mean([shp[(lab, v, s_)] for v in (10, 15)]) for s_ in ("zv", "zvd")], w, color=["#f4a3a3", "#e05a5a", "#a01010"][i], label=f"sim, mode {lab} Hz")
-ax[2].set_xticks(x); ax[2].set_xticklabels(["ZV", "ZVD"]); ax[2].set_ylabel("ratio to unshaped"); ax[2].set_title("(c) Input shaping at 7.0 Hz", fontsize=8); ax[2].legend(fontsize=5.5)
+for v, c in zip(sp, ("#1f77b4", "#2ca02c", "#d62728")):
+    pts = [r for r in rp if r["v"] == v]
+    ax[1].scatter([r["real"] for r in pts], [r["sim"] for r in pts], s=12, color=c, label=f"{v} deg/s", zorder=3)
+lim = [0.01, 0.13]; ax[1].plot(lim, lim, "k:", lw=0.6); ax[1].set_xlim(lim); ax[1].set_ylim(lim)
+ax[1].set_xlabel("measured residual rms [rad/s]"); ax[1].set_ylabel("sim (encoder replay) [rad/s]"); ax[1].set_title("(b) 18 conditions, 5-10 Hz", fontsize=8); ax[1].legend(fontsize=5.5)
+da = rd(O + "/exp3_replay_d1a.csv")
+def shp_of(rows, v, s_, key, cond=lambda r: True):
+    return [r[key] for r in rows if cond(r) and f"_v{v}_" in r.get("cond", r.get("arm", "")) and f"_{s_}_" in r.get("cond", r.get("arm", "")) + "_"][0]
+realshape = {(10, "zv"): 0.42, (15, "zv"): 0.72, (10, "zvd"): 0.28, (15, "zvd"): 0.29}   # FW191_D_LOG 5.2 (조건 중앙값)
+rep_ratio = {(v, s_): shp_of(da, v, s_, "stop_pitch_5_10") / shp_of(da, v, "none", "stop_pitch_5_10") for v in (10, 15) for s_ in ("zv", "zvd")}
+srv_ratio = {(v, s_): [r["rms"] for r in sim if r["speed"] == v and r["shape"] == s_][0] / [r["rms"] for r in sim if r["speed"] == v and r["dist"] == 10 and r["shape"] == "none"][0] for v in (10, 15) for s_ in ("zv", "zvd")}
+x = np.arange(4); w = 0.27; keys = [(10, "zv"), (15, "zv"), (10, "zvd"), (15, "zvd")]
+ax[2].bar(x - w, [realshape[k] for k in keys], w, color="#bbbbbb", label="measured")
+ax[2].bar(x, [rep_ratio[k] for k in keys], w, color="#e05a5a", label="sim, encoder replay")
+ax[2].bar(x + w, [srv_ratio[k] for k in keys], w, color="#f4c0c0", label="sim, servo model")
+ax[2].set_xticks(x); ax[2].set_xticklabels(["ZV 10", "ZV 15", "ZVD 10", "ZVD 15"], fontsize=6); ax[2].set_ylabel("ratio to unshaped"); ax[2].set_title("(c) Input shaping at 7.0 Hz", fontsize=8); ax[2].legend(fontsize=5.5)
 fig.tight_layout(); fig.savefig(F + "/fig_valid.png"); plt.close(fig)
 
-md.append("## 1. 고정 베이스 검증 (J2 등속 후 정지, 자세 A)\n")
-md.append("시뮬레이션 값은 그리퍼 몸통 기준 값에 카메라 자리 비 1.27을 곱한 것. 실측은 c1_stops.csv(11/17, 90회).\n")
-md.append("| 속도 | 실측 rms 중앙 (조건 중앙의 최소–최대) | 시뮬레이션 rms (거리 6조건 최소–최대) | 실측 창 최대 | 시뮬레이션 창 최대 |\n|---|---|---|---|---|")
+md.append("## 1. 고정 베이스 대조 (J2 등속 후 정지, 자세 A, 정지 창 끄덕임 5–10 Hz rms)\n")
+md.append("시뮬레이션 값은 그리퍼 몸통 기준 값에 카메라 자리 비 1.27을 곱한 것. 실측은 `piper_ws/docs/data/raw`의 조건별 중앙값 시행.\n")
+ra = np.array([r["sim"] / r["real"] for r in rp])
+md.append(f"**(가) 엔코더 재생** — 실측 엔코더 기록을 모터 쪽에 그대로 넣음. 18조건: 시뮬레이션 / 실측 비 중앙 {np.median(ra):.2f} ({ra.min():.2f}–{ra.max():.2f}), 조건 간 상관 {np.corrcoef([r['sim'] for r in rp], [r['real'] for r in rp])[0, 1]:.2f}.\n")
+md.append("| 속도 | 실측 (6조건 최소–최대) | 엔코더 재생 | 서보 모형(명령만 넣음) |\n|---|---|---|---|")
+ss = {v: [r["rms"] * CAM for r in sim if r["speed"] == v and r["shape"] == "none"] for v in sp}
 for v in sp:
-    cm = [S.median([abs(r["gyro_rms"]) for r in real if r["speed_dps"] == v and r["dist_deg"] == dd]) for dd in (-10, -5, -2.5, 2.5, 5, 10)]
-    pm = [S.median([abs(r["max_rads"]) for r in real if r["speed_dps"] == v and r["dist_deg"] == dd]) for dd in (-10, -5, -2.5, 2.5, 5, 10)]
-    sp_ = [r["peak"] * CAM for r in sim if r["speed"] == v and r["shape"] == "none"]
-    md.append(f"| {v} °/s | {S.median(rs[v]):.4f} ({min(cm):.4f}–{max(cm):.4f}) | {min(ss[v]):.4f}–{max(ss[v]):.4f} | {min(pm):.3f}–{max(pm):.3f} | {min(sp_):.3f}–{max(sp_):.3f} |")
-md.append("\n입력 성형(성형기 7.0 Hz·ζ 0.10, 성형 없음 대비 rms 비):\n\n| | 실측 11/18 (그날 모드 6.0–6.6 Hz) | 시뮬레이션 모드 7.0 Hz | 6.3 Hz | 6.06 Hz |\n|---|---|---|---|---|")
-for s_ in ("zv", "zvd"):
-    md.append(f"| {s_.upper()} 10 / 15 °/s | {realshape[(10, s_)]} / {realshape[(15, s_)]} | " + " | ".join(f"{shp[(lab, 10, s_)]:.2f} / {shp[(lab, 15, s_)]:.2f}" for lab in ("7.0", "6.3", "6.06")) + " |")
+    pts = [r for r in rp if r["v"] == v]
+    md.append(f"| {v} °/s | {min(r['real'] for r in pts):.4f}–{max(r['real'] for r in pts):.4f} | {min(r['sim'] for r in pts):.4f}–{max(r['sim'] for r in pts):.4f} | {min(ss[v]):.4f}–{max(ss[v]):.4f} |")
+md.append("\n입력 성형(성형기 7.0 Hz·ζ 0.10, 성형 없음 대비 비):\n\n| | 실측 11/18 (조건 중앙값) | 엔코더 재생 | 서보 모형 |\n|---|---|---|---|")
+for k in keys:
+    md.append(f"| {k[1].upper()} {k[0]} °/s | {realshape[k]} | {rep_ratio[k]:.2f} | {srv_ratio[k]:.2f} |")
+md.append("")
 
 # ---------------- 그림 2: AMR 출발–정지 (실물 장착: 팔 앞이 AMR 옆) ----------------
 # 지표: 감속 명령이 끝난 뒤 2 s 창, 끝단 자이로 세 축의 2–20 Hz 벡터 rms (stop_vec). 직진 가감속은 좌우 모드를 흔든다.
@@ -163,6 +163,24 @@ if os.path.exists(p0):
     for r in m0:
         md.append(f"| {r['case']} | {r['stop_rms'] / n0['stop_rms']:.3f} |")
     md.append("\n그림과 나머지 표는 `figs/yaw0/`.")
+
+# ---------------- 5. 팔 동작 시나리오 x 베이스 ----------------
+if os.path.exists(O + "/exp3_ideal_amr.csv"):
+    md.append("\n## 5. 팔 동작 시나리오 × 베이스 (동작 구간의 끝단 자이로, 그리퍼 몸통 기준 rad/s)\n")
+    md.append("팔: 자세 유지 / 1축(J2) / 2축(J1+J2) / 3축(J1+J2+J3), ±5° 0.25 Hz 사인(실기 시나리오와 같은 명령). 베이스: 정지 / 이동(0 → 0.5 m/s → 0, 1 m/s², 앞뒤 되풀이) / 이동 + ZVD(4.1 Hz).\n")
+    md.append("**(나) 서보 모형에 명령만 넣은 것** — 모터 쪽 떨림이 없어 팔 자체 진동이 실물보다 훨씬 작게 나온다(실측 위치 모드 5–10 Hz |gyro| 1축 0.060 / 2축 0.055 / 3축 0.073 rad/s, 카메라 자리).\n")
+    md.append("| 팔 | 고정 베이스 5–10 Hz | AMR 정지 2–20 Hz | AMR 이동 2–20 Hz (좌우 축) | 이동 + ZVD 2–20 Hz |\n|---|---|---|---|---|")
+    fx = {r["arm"]: r for r in rd(O + "/exp3_ideal_fixed.csv")}; am = rd(O + "/exp3_ideal_amr.csv")
+    for scn, nm in (("hold", "자세 유지"), ("1", "1축"), ("2", "2축"), ("3", "3축")):
+        g = {r["base"]: r for r in am if str(r["arm"]).replace(".0", "") == scn}
+        fxr = [v for k_, v in fx.items() if str(k_).replace(".0", "") == scn][0]
+        md.append(f"| {nm} | {fxr['move_vec_5_10']:.4f} | {g['still']['move_vec_2_20']:.4f} | {g['move']['move_vec_2_20']:.4f} ({g['move']['yaw']:.4f}) | {g['zvd']['move_vec_2_20']:.4f} |")
+    if os.path.exists(O + "/exp3_replay_d1b5_amr.csv"):
+        g = {r["base"]: r for r in rd(O + "/exp3_replay_d1b5_amr.csv")}
+        md.append("\n**(가) 실측 엔코더 재생** — 11/19 위치 모드 J2 10 °/s × 10° 왕복 6회 기록(1축 동작에 해당)을 재생하면서 베이스를 움직임.\n")
+        md.append("| 베이스 | 5–10 Hz 벡터 | 2–20 Hz 벡터 | 비틀림 | 끄덕임 | 좌우 |\n|---|---|---|---|---|---|")
+        for b, nm in (("still", "정지"), ("move", "이동"), ("zvd", "이동 + ZVD")):
+            r = g[b]; md.append(f"| {nm} | {r['move_vec_5_10']:.4f} | {r['move_vec_2_20']:.4f} | {r['roll']:.4f} | {r['pitch']:.4f} | {r['yaw']:.4f} |")
 
 open(F + "/summary.md", "w").write("\n".join(md) + "\n")
 print("\n".join(md))

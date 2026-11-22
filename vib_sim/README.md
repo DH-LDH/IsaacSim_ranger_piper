@@ -12,6 +12,9 @@ python3 fit_modal.py                            # 관절 강성 후보 훑기(�
 ~/isaacsim/python.sh exp1_fixed.py              # 고정 베이스: J2 등속 후 정지 18조건 + 입력 성형
 ~/isaacsim/python.sh exp2_base.py --cases none,scurve,zv,zvd,armff,scurve+armff --tag main --keep
 ./run_all_yaw90.sh                              # AMR 실험 전부(가속 시간·가속도·좌우 강성·서스펜션), 실물 장착 방향
+python3 fit_servo.py                            # 서보 모형을 실측 명령 → 엔코더 응답에 맞춤(Isaac 필요 없음)
+~/isaacsim/python.sh exp3_scn.py --src replay --bases fixed --files <raw/c1/*.csv.gz> --tag replay_c1   # 실측 엔코더 재생 대조
+~/isaacsim/python.sh exp3_scn.py --src ideal --bases still,move,zvd --tag ideal_amr                    # 팔 동작 시나리오 × 베이스 이동
 ~/nonmoon/.venv_pptx/bin/python make_figs.py    # figs/*.png, figs/summary.md
 ```
 
@@ -24,15 +27,22 @@ python3 fit_modal.py                            # 관절 강성 후보 훑기(�
 
 | 항목 | 값 | 근거 |
 |---|---|---|
-| 팔 질량 | 공식 URDF 4.66 kg + 손목 카메라 0.11 kg | 기존 `piper_v2.usd`는 링크 합이 약 1.2 kg이라 쓰지 않음. 카메라 쪽 유효 질량은 FW191_B_LOG |
-| 관절 탄성 | 관절마다 스프링·댐퍼. K = [200, 1355, 361, 3000, 342, 3000] N·m/rad | J2·J3·J5는 `fit_modal.py`: 자세 A 7.01 Hz, 자세 B 6.25 Hz(실측 6.6–7.3 / 6.2–6.3 Hz), 둘째 모드 12.6 Hz. J1(좌우)은 10/23 J1 계단·옆 툭을 좌우 축으로 다시 낸 값(FW191_D_LOG 14절: 자세 A 4.0–5.1 Hz, 자세 B 3.1–3.4 Hz, 감쇠비 0.07–0.19)에 맞춰 자세 A 4.15 Hz·감쇠비 0.12. 예비 값이다. 이 성분에는 J1 관절이 서보에 대해 돌아가는 몫이 섞여 있는데 스프링 하나로 묶었다 |
-| 감쇠 | 강성 비례, 1차 모드에서 감쇠비 0.10 | 자세 A 실측 0.09–0.13 |
-| 엔코더 / IMU | 엔코더 = 모터 쪽 각도, 끝단 자이로 = 그리퍼 몸통 각속도의 끄덕임 성분 | 실측은 카메라 자리. 절댓값을 댈 때만 1.27을 곱한다(FW191_B_LOG) |
-| 위치 모드 서보 | 명령 100 Hz, 지연 55 ms + 2차 응답(9 Hz, 감쇠비 0.35) | 실측 지연 67–83 ms, 정지 지연 50–80 ms, 등속 중 엔코더 속도 봉우리 +20–25%, 5·10 °/s 정지 후 rms |
-| AMR | 기존 Ranger USD(64.5 kg + 바퀴), 바퀴 속도 구동, 마찰 계수 1.0 | 서스펜션 없음. 민감도 시험에서만 바퀴마다 상하 스프링·댐퍼를 넣는다 |
-| 팔 장착 | 팔 앞이 AMR의 옆(90°, 기본값) | 실물과 같다(`step22_common.ARM_BASE_YAW_DEG`). 직진 가감속은 팔의 좌우 모드를 흔든다. `--mount-yaw 0`이면 팔 앞이 진행 방향(끄덕임 모드를 흔듦) — 그 결과는 `out/yaw0`, `figs/yaw0` |
+| 팔 질량 | 공식 URDF 4.66 kg + 손목 카메라 0.11 kg | 기존 `piper_v2.usd`는 링크 합이 약 1.2 kg이라 쓰지 않음 |
+| 끄덕임 쪽 관절 탄성 | J2 881, J3 5704, J5 27 N·m/rad | 자세 A 7.08·7.89 Hz, 자세 B 6.24 Hz. 실측 주파수에 더해 실측 엔코더 재생 때 끝단 진동 크기가 실측과 맞는 조합(`exp3_scn.py --src replay --K ...`) |
+| 좌우(J1) 탄성 | 200 N·m/rad, 감쇠비 0.12 | 자세 A 4.15 Hz. 실측 예비 값(자세 A 4.0–5.1 Hz)에 맞춤. J1 서보가 밀리는 몫과 구조 탄성을 한 스프링으로 묶음 |
+| 감쇠 | 강성 비례, 7 Hz에서 감쇠비 0.10 | 자세 A 실측 0.09–0.13 |
+| 엔코더 / IMU | 엔코더 = 모터 쪽 각도, 끝단 자이로 = 그리퍼 몸통 각속도(팔 기준 비틀림·끄덕임·좌우) | 실측은 카메라 자리. 절댓값을 댈 때만 1.27을 곱한다 |
+| 위치 모드 서보 | 명령 100 Hz, 지연 20 ms + 2차 응답 10 Hz·감쇠비 0.5 | `fit_servo.py`: 실측 명령 → 엔코더 응답에 맞춤 |
+| AMR | 기존 Ranger USD(64.5 kg + 바퀴), 바퀴 속도 구동, 마찰 계수 1.0 | 서스펜션 없음. 민감도 시험에서만 바퀴마다 상하 스프링·댐퍼 |
+| 팔 장착 | 팔 앞이 AMR의 옆(90°, 기본값) | 실물과 같다. 직진 가감속은 팔의 좌우 모드를 흔든다. `--mount-yaw 0`이면 팔 앞이 진행 방향 |
 
-구현: PhysX 관절 각도를 링크 쪽 각도로 보고, 모터 쪽 각도는 스크립트에서 따로 적분해 관절 구동의 목표로 넣는다. 관절 구동의 stiffness·damping이 곧 관절 탄성이다.
+구현: PhysX 관절 각도를 링크 쪽 각도로 보고, 모터 쪽 각도는 스크립트에서 따로 정해 관절 구동의 목표로 넣는다. 관절 구동의 stiffness·damping이 곧 관절 탄성이다.
+
+팔을 움직이는 방법 둘
+- **엔코더 재생**(`exp3_scn.py --src replay`): 실측 엔코더 기록(`piper_ws/docs/data/raw/*.csv.gz`)을 모터 쪽 각도로 그대로 넣는다. 실물의 모터 쪽 떨림이 들어간다. 실측과 대조할 때는 이 방식을 쓴다.
+- **서보 모형**(`exp1_fixed.py`, `exp3_scn.py --src ideal`, `drive.py`): 명령만 넣는다. 모터 쪽이 매끄럽게만 움직여 팔 자체 진동이 실물보다 훨씬 작게 나온다.
+
+이전 실행(값을 고치기 전): `out/prefit`·`figs/prefit`(관절 강성 1355·361·342, 서보 55 ms + 9 Hz), `out/lat11hz`(좌우 모드를 11.4 Hz로 잘못 둔 것), `out/yaw0`(팔을 진행 방향으로 장착).
 
 ## 결과
 

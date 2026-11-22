@@ -7,7 +7,7 @@ import numpy as np
 from vibsim import HERE, POSE_A, PosServo, VibSim, shaper, stop_metrics
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--Td", type=float, default=0.055); ap.add_argument("--fs", type=float, default=9.0); ap.add_argument("--zs", type=float, default=0.35)
+ap.add_argument("--Td", type=float, default=0.020); ap.add_argument("--fs", type=float, default=10.0); ap.add_argument("--zs", type=float, default=0.5)
 ap.add_argument("--tune", action="store_true"); ap.add_argument("--tag", default="")
 ap.add_argument("--K-scale", type=float, default=1.0, help="관절 강성 배율 — 성형기(7.0 Hz)와 실제 모드가 어긋난 날을 흉내")
 ap.add_argument("--shape-only", action="store_true"); ap.add_argument("--hz", type=int, default=1000)
