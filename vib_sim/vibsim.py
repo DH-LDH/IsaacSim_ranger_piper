@@ -75,7 +75,8 @@ def _find(stage, root, name, api=None):
 
 class VibSim:
     def __init__(self, base="fixed", hz=1000, cam_mass=0.11, payload=0.0, K=None, D=None, pose=POSE_A,
-                 wheel_mu=1.0, tire_k=0.0, tire_c=0.0, susp_k=0.0, susp_c=0.0, mount_yaw=ARM_BASE_YAW_DEG, verbose=True):
+                 wheel_mu=1.0, tire_k=0.0, tire_c=0.0, susp_k=0.0, susp_c=0.0, mount_yaw=ARM_BASE_YAW_DEG, mount_x=0.0, z0=0.0, verbose=True):
+        self.mount_x, self.z0 = mount_x, z0   # 팔 장착 위치를 앞뒤로 옮김[m](음수 = 뒷바퀴 쪽), 로봇을 놓는 높이[m]
         self.mount_yaw = mount_yaw if base != "fixed" else 0.0
         self.susp_k, self.susp_c = susp_k, susp_c   # 바퀴마다 상하 서스펜션 [N/m, N·s/m] — 0이면 없음(강체 섀시)
         self.tire_k, self.tire_c = tire_k, tire_c   # 타이어(접촉) 탄성 [N/m, N·s/m] — 0이면 강체 접촉
@@ -119,18 +120,21 @@ class VibSim:
         else:
             root = "/World/Ranger"
             add_reference_to_stage(usd_path=RANGER_USD, prim_path=root)
+            if z0 != 0.0:
+                UsdGeom.XformCommonAPI(st.GetPrimAtPath(root)).SetTranslate(Gf.Vec3d(0, 0, z0))
+            ABL = (ARM_BASE_LOCAL[0] + mount_x, ARM_BASE_LOCAL[1], ARM_BASE_LOCAL[2])
             rb = _find(st, root, "base_link", UsdPhysics.RigidBodyAPI)
             for p in Usd.PrimRange(st.GetPrimAtPath("/World/piper")):
                 if p.HasAPI(UsdPhysics.ArticulationRootAPI):
                     p.RemoveAPI(UsdPhysics.ArticulationRootAPI)
                     if p.HasAPI(PhysxSchema.PhysxArticulationAPI):
                         p.RemoveAPI(PhysxSchema.PhysxArticulationAPI)
-            UsdGeom.XformCommonAPI(st.GetPrimAtPath("/World/piper")).SetTranslate(Gf.Vec3d(*ARM_BASE_LOCAL))
+            UsdGeom.XformCommonAPI(st.GetPrimAtPath("/World/piper")).SetTranslate(Gf.Vec3d(ABL[0], ABL[1], ABL[2] + z0))
             UsdGeom.XformCommonAPI(st.GetPrimAtPath("/World/piper")).SetRotate(Gf.Vec3f(0, 0, self.mount_yaw))
             fj = UsdPhysics.FixedJoint.Define(st, "/World/piper/mount_joint")
             fj.CreateBody0Rel().SetTargets([rb.GetPath()])
             fj.CreateBody1Rel().SetTargets([arm_base.GetPath()])
-            fj.CreateLocalPos0Attr(Gf.Vec3f(*ARM_BASE_LOCAL)); fj.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
+            fj.CreateLocalPos0Attr(Gf.Vec3f(*ABL)); fj.CreateLocalPos1Attr(Gf.Vec3f(0, 0, 0))
             cy, sy = math.cos(math.radians(self.mount_yaw / 2)), math.sin(math.radians(self.mount_yaw / 2))
             fj.CreateLocalRot0Attr(Gf.Quatf(cy, 0, 0, sy)); fj.CreateLocalRot1Attr(Gf.Quatf(1, 0, 0, 0))
             self.ranger_base = rb

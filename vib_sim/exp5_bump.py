@@ -9,6 +9,8 @@ AMR이 등속으로 가다가 바닥의 턱(높이 --h, 길이 3 cm, 앞바퀴 �
   ffservo   같은 피드포워드를 위치 모드 서보(센서 10 ms + 지연 20 ms + 10 Hz 2차)로
   prev      뒷바퀴 예측: 앞바퀴가 넘을 때 잰 베이스 가속도를 기억해 두었다가, 뒷바퀴가 넘을 시각(축간 거리 / 속도 뒤)에 지연 없이 미리 넣는다.
             뒷바퀴가 넘을 때는 차체 끄덕임의 부호가 반대라 그 성분만 뒤집는다.  prevE10 = 예측 시각이 10 ms 늦음(E-10 = 10 ms 이름)
+  map       지도 기반 예견(앞을 보는 센서): 같은 턱을 미리 한 번 넘어 잰 베이스 가속도를 "위치의 함수"로 기억해 두고, 그 위치에서 지연 없이 넣는다.
+            mapE3 = 턱 위치를 3 mm 뒤로 잘못 앎(E-3은 앞으로), mapS70 = 턱 크기를 잘못 알아 파형을 0.7배로 넣음, mapservo = 위치 모드 서보로(서보 지연만큼 앞당겨 넣음)
   dampN     끝단 자이로 되먹임 감쇠, 지연 N ms.  끄덕임 → J5, 좌우 → J1 모터 쪽을 각속도 반대 방향으로 민다(감쇠비 +0.3 상당)
   dampNp    같은 되먹임에 위상 예측: 울림이 한 주파수(끄덕임 7.5 Hz, 좌우 4.1 Hz)라고 보고 N ms 뒤의 값을 계산해 쓴다
 출력: out/exp5_<tag>.csv — 끝단 자이로 세 축 2–20 Hz rms: 전체 / 앞바퀴 구간 / 뒷바퀴 구간.
@@ -25,14 +27,24 @@ ap.add_argument("--cases", default="none,ff0,ff5,ff10,ff20,ff40,ffservo")
 ap.add_argument("--susp-k", type=float, default=120000.0); ap.add_argument("--susp-c", type=float, default=623.0)
 ap.add_argument("--lp", type=float, default=40.0, help="IMU 저역 통과[Hz]"); ap.add_argument("--zadd", type=float, default=0.3, help="되먹임으로 더하려는 감쇠비")
 ap.add_argument("--fp", type=float, default=7.5); ap.add_argument("--fy", type=float, default=4.1)
+ap.add_argument("--mount-x", type=float, default=0.0, help="팔 장착 위치를 앞뒤로 옮김[m]. -0.20이면 뒷바퀴 축(-0.247) 가까이")
+ap.add_argument("--pothole", type=float, default=0.0, help="0보다 크면 턱 대신 패인 곳: 길이[m] (깊이는 --h)")
 ap.add_argument("--tag", default="bump"); ap.add_argument("--keep", action="store_true")
 a = ap.parse_args()
-sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c)
+ZP = 0.04 if a.pothole > 0 else 0.0           # 패인 곳은 바닥을 뚫을 수 없어 4 cm 높이의 단 위를 달리게 하고 단에 홈을 낸다
+sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, mount_x=a.mount_x, z0=ZP)
 os.makedirs(HERE + "/out", exist_ok=True)
 XB, LWB = 0.75, 0.494                        # 턱 위치[m], 축간 거리[m]
-cube = UsdGeom.Cube.Define(sim.stage, "/World/bump"); cube.CreateSizeAttr(1.0)
-x = UsdGeom.Xformable(cube); x.AddTranslateOp().Set(Gf.Vec3d(XB, 0.0, 0.0)); x.AddScaleOp().Set(Gf.Vec3f(0.03, 2.0, 2 * a.h))
-UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+def box(name, x0, x1, top):
+    c = UsdGeom.Cube.Define(sim.stage, "/World/" + name); c.CreateSizeAttr(1.0)
+    xf = UsdGeom.Xformable(c); xf.AddTranslateOp().Set(Gf.Vec3d((x0 + x1) / 2, 0.0, top - 0.05)); xf.AddScaleOp().Set(Gf.Vec3f(x1 - x0, 2.0, 0.1))
+    UsdPhysics.CollisionAPI.Apply(c.GetPrim())
+
+
+if a.pothole > 0:
+    box("deck_a", -2.0, XB, ZP); box("deck_hole", XB, XB + a.pothole, ZP - a.h); box("deck_b", XB + a.pothole, XB + a.pothole + 4.0, ZP)
+else:
+    box("bump", XB - 0.015, XB + 0.015, a.h)
 
 sim.world.reset(); sim._apply_gains(); sim.set_state(POSE_A)
 for _ in range(2500):
@@ -40,7 +52,7 @@ for _ in range(2500):
 M = sim.mass_matrix(); off = M.shape[0] - sim.n
 FF = M[off + sim.ia][:, :6] / sim.K[:, None]  # 베이스 가속도(병진 xyz, 회전 xyz) → 모터 쪽 보정각
 FLIP = np.array([1, 1, 1, 1, -1, 1.0])        # 뒷바퀴가 넘을 때: 차체 끄덕임(wy)만 부호 반대
-DT = sim.dt; NB = 200
+DT = sim.dt; NB = 200; LIB = None; CORR = float("nan")
 
 
 def run(case):
@@ -48,6 +60,9 @@ def run(case):
     ffd = next((int(t[2:]) for t in tok if t.startswith("ff") and t != "ffservo"), None)
     servo = "ffservo" in tok
     prev = next((t for t in tok if t.startswith("prev")), None); perr = int(prev[5:]) if prev and len(prev) > 4 else 0
+    mp = next((t for t in tok if t.startswith("map")), None)
+    mp_e = float(mp[4:]) / 1000.0 if mp and mp.startswith("mapE") else 0.0; mp_s = float(mp[4:]) / 100.0 if mp and mp.startswith("mapS") else 1.0
+    mp_servo = mp == "mapservo"; servo = servo or mp_servo
     dmp = next((t for t in tok if t.startswith("damp")), None)
     dd = int(dmp[4:].rstrip("p")) if dmp else None; dpred = bool(dmp and dmp.endswith("p"))
     sim.world.reset(); sim._apply_gains(); sim.set_state(POSE_A); sv = PosServo(POSE_A, DT)
@@ -73,11 +88,14 @@ def run(case):
         elif t_f is not None and len(rec) < 700:
             rec.append(af.copy())
         in_rear = prev is not None and i_rear is not None and 0 <= i - i_rear < len(rec)
-        if in_rear:
+        if mp is not None and LIB is not None:                         # 지도 기반 예견: 위치로 찾아 넣는다
+            xq = (XBASE[i - 1] - x0 if i > 0 else 0.0) - mp_e + (a.v * 0.036 if mp_servo else 0.0)
+            dq += mp_s * (FF @ np.array([np.interp(xq, LIB[0], LIB[1][:, c]) for c in range(6)]))
+        elif in_rear:
             dq += FF @ (FLIP * rec[i - i_rear])                        # 뒷바퀴: 기억해 둔 것을 지연 없이
         elif ffd is not None:
             dq += FF @ abuf[-1 - ffd]
-        elif servo:
+        elif servo and not mp_servo:
             dq += FF @ abuf[-1 - 10]
         if dd is not None:                                             # 끝단 자이로 되먹임 감쇠
             s0 = gbuf[-1 - dd]; s1 = gbuf[-1 - dd - 4]; ds = (s0 - s1) / (4 * DT)
@@ -102,7 +120,14 @@ def run(case):
         B = np.stack([band(G[m, c], sim.hz, 2.0, 20.0) for c in range(3)], axis=1); ax = np.sqrt(np.mean(B ** 2, axis=0))
         return float(np.sqrt(np.sum(ax ** 2))), ax
     allv, ax = rms(tf - 0.1, tr + 1.5); fr, _ = rms(tf - 0.1, tr - 0.1); re, _ = rms(tr - 0.1, tr + 1.5)
-    row = dict(case=case, v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
+    if case == "none":                                                 # 지도(위치 → 베이스 가속도)와 앞·뒤 충격의 닮은 정도
+        globals()["LIB"] = (XBASE - x0, A6.copy())
+        i0 = np.searchsorted(t, tf - 0.03); j0 = np.searchsorted(t, tr - 0.03); best = 0.0
+        for lag in range(-150, 151, 2):
+            f_, r_ = A6[i0:i0 + 600, 2], A6[j0 + lag:j0 + lag + 600, 2]
+            if len(r_) == 600: best = max(best, float(np.corrcoef(f_, r_)[0, 1]))
+        globals()["CORR"] = best
+    row = dict(case=case, mount_x=a.mount_x, pothole=a.pothole, susp_k=a.susp_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
                dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), t_front=tf, x_end=float(XBASE[-1] - x0))
     if a.keep:
         np.savez(HERE + f"/out/exp5_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, tf=tf, tr=tr)
