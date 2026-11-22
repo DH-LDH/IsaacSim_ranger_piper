@@ -11,6 +11,7 @@
   --file     기록 파일을 직접 지정(piper_ws docs/data/raw 아래 *.csv.gz)
 
 MIT 기록(tde, asmc)에는 순간 튐이 들어 있다. 화면에서 팔이 툭 튀는 순간이 그것이고, 터미널에 튐 시각을 미리 찍어 준다.
+--no-jump 를 붙이면 튐을 지우고 튼다(튐이 없었다면 어땠을지 보는 용도 — 실물에서 튐을 없앤 것이 아니다).
 터미널에는 되풀이마다 끝단 진동(튐 구간 제외)이 찍힌다. 창을 닫거나 Ctrl+C로 끝낸다.
 """
 import argparse, csv, gzip, math, os, time
@@ -28,6 +29,7 @@ ap.add_argument("--scn", choices=["1", "2", "3"], default="1"); ap.add_argument(
 ap.add_argument("--base", choices=["fixed", "still", "move", "zvd"], default="move"); ap.add_argument("--file", default="")
 ap.add_argument("--t0", type=float, default=0.0); ap.add_argument("--t1", type=float, default=20.0)
 ap.add_argument("--slow", type=float, default=1.0); ap.add_argument("--soft", type=float, default=1.0); ap.add_argument("--sf", type=float, default=4.125)
+ap.add_argument("--no-jump", action="store_true", help="MIT 기록의 순간 튐을 지우고 재생(튐 구간을 기준 각도 + 앞뒤 오차의 직선으로 메움)")
 ap.add_argument("--loops", type=int, default=0); ap.add_argument("--shot", default="")
 a = ap.parse_args()
 path = a.file or f"{RAW}/{FILES[(a.scn, a.ctrl)]}.csv.gz"
@@ -39,12 +41,22 @@ with (gzip.open if path.endswith(".gz") else open)(path, "rt") as f:
 tr = np.array([float(x["t"]) for x in rec]); tcsv0 = float(tr[0]); tr = tr - tcsv0
 qr = np.radians(np.array([[float(x[f"q{j}"]) for j in range(1, 7)] for x in rec]))
 t1 = min(a.t1, tr[-1]); DT = 0.001
+jp0 = os.path.join(RAW, "mit_jumps.csv")
+if a.no_jump and os.path.exists(jp0) and "qref1" in rec[0]:
+    qref = np.radians(np.array([[float(x[f"qref{j}"]) for j in range(1, 7)] for x in rec])); nj = 0
+    for r_ in csv.DictReader(open(jp0)):
+        if r_["stem"] != stem: continue
+        i0, i1 = np.searchsorted(tr, float(r_["exclude_from"]) - tcsv0), min(len(tr) - 1, np.searchsorted(tr, float(r_["exclude_to"]) - tcsv0))
+        if i1 <= i0: continue
+        e0, e1 = qr[i0] - qref[i0], qr[i1] - qref[i1]; u = ((tr[i0:i1] - tr[i0]) / (tr[i1] - tr[i0]))[:, None]
+        qr[i0:i1] = qref[i0:i1] + e0 + (e1 - e0) * u; nj += 1
+    print(f"순간 튐 {nj}개를 지웠다(--no-jump)")
 tt = np.arange(a.t0, t1, DT); Q = np.stack([np.interp(tt, tr, qr[:, j]) for j in range(6)], axis=1)
 V = np.gradient(Q, DT, axis=0); k = np.ones(25) / 25.0; V = np.stack([np.convolve(V[:, j], k, "same") for j in range(6)], axis=1)
 jp = os.path.join(RAW, "mit_jumps.csv")
 excl = [(float(r["exclude_from"]) - tcsv0, float(r["exclude_to"]) - tcsv0, float(r["t_csv"]) - tcsv0, r["joint"]) for r in csv.DictReader(open(jp)) if r["stem"] == stem] if os.path.exists(jp) else []
 print(f"\n기록 {stem}  구간 {a.t0:g}–{t1:g} s  베이스 {a.base}")
-if excl:
+if excl and not a.no_jump:
     print("  순간 튐: " + ", ".join(f"{e[2] - a.t0:.1f} s(J{e[3]})" for e in excl if a.t0 <= e[2] < t1) + "  ← 화면에서 팔이 툭 튀는 때(구간 시작 기준)")
 
 sim = VibSim(base="fixed" if FIXED else "ranger", verbose=False)
