@@ -37,6 +37,8 @@ ap.add_argument("--pothole", type=float, default=0.0, help="0보다 크면 턱 �
 ap.add_argument("--yaw", type=float, default=90.0, help="팔 장착 방향[deg]: 90 = 옆(실물), 0 = 앞, 180 = 뒤")
 ap.add_argument("--blen", type=float, default=0.03, help="턱 길이[m]"); ap.add_argument("--side", type=int, default=0, help="1이면 왼쪽 바퀴만 넘는 턱")
 ap.add_argument("--pose", default="A"); ap.add_argument("--dq-step", type=float, default=0.0, help="보정각 분해능[deg]"); ap.add_argument("--dq-dead", type=float, default=0.0, help="보정각 불감대[deg]")
+ap.add_argument("--lib-from", default="", help="지도 예견에 쓸 베이스 가속도 지도를 다른 실행(태그)에서 가져온다 — 다른 크기·속도의 턱에서 만든 지도를 쓰는 경우")
+ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
 ap.add_argument("--tag", default="bump"); ap.add_argument("--keep", action="store_true")
 a = ap.parse_args()
 ZP = 0.04 if a.pothole > 0 else 0.0           # 패인 곳은 바닥을 뚫을 수 없어 4 cm 높이의 단 위를 달리게 하고 단에 홈을 낸다
@@ -140,7 +142,11 @@ def run(case):
         return float(np.sqrt(np.sum(ax ** 2))), ax
     allv, ax = rms(tf - 0.1, tr + 1.5); fr, _ = rms(tf - 0.1, tr - 0.1); re, _ = rms(tr - 0.1, tr + 1.5)
     if case == "none":                                                 # 지도(위치 → 베이스 가속도)와 앞·뒤 충격의 닮은 정도
-        globals()["LIB"] = (XBASE - x0, A6.copy())
+        np.savez(HERE + f"/out/exp6_lib_{a.tag}.npz", x=XBASE - x0, a6=A6)
+        if a.lib_from:
+            L_ = np.load(HERE + f"/out/exp6_lib_{a.lib_from}.npz"); globals()["LIB"] = (L_["x"], L_["a6"] * a.lib_scale)
+        else:
+            globals()["LIB"] = (XBASE - x0, A6.copy())
         i0 = np.searchsorted(t, tf - 0.03); j0 = np.searchsorted(t, tr - 0.03); best = 0.0
         for lag in range(-150, 151, 2):
             f_, r_ = A6[i0:i0 + 600, 2], A6[j0 + lag:j0 + lag + 600, 2]
