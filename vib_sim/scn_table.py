@@ -34,13 +34,17 @@ md = ["순간 튐 구간(튐 −0.1 s – +1.2 s)은 실측과 재생 양쪽에�
 rows = []
 for o in order:
     stem = "20261029_" + o; m = meta[stem]; rg = real_gyro(stem)
-    scn = m["cond"].split(" ")[0]; f = sim[(stem, "fixed")]; s, mv, z = (sim[(stem, b)] for b in ("still", "move", "zvd"))
-    fx = float(f["move_vec_5_10"]) * 1.27; a, b, c = float(s["move_vec_2_20"]), float(mv["move_vec_2_20"]), float(z["move_vec_2_20"])
+    scn = m["cond"].split(" ")[0]; f = sim[(stem, "fixed")]; fx = float(f["move_vec_5_10"]) * 1.27
+    if (stem, "still") not in sim:        # MIT 기록은 베이스 이동을 겹치지 않는다(가정이 성립하지 않음)
+        md.append(f"| {scn} | {name[m['ctrl']]} | {f.get('n_jump', '0')} | {rg['keep']:.2f} | {rg['5_10']:.4f} | {fx:.4f} | {fx / rg['5_10']:.2f} | — | — | — | — | — |")
+        rows.append((scn, m["ctrl"], rg["5_10"], fx, float("nan"), float("nan"), float("nan"), float("nan"), float("nan"), float("nan"))); continue
+    s, mv, z = (sim[(stem, b)] for b in ("still", "move", "zvd"))
+    a, b, c = float(s["move_vec_2_20"]), float(mv["move_vec_2_20"]), float(z["move_vec_2_20"])
     md.append(f"| {scn} | {name[m['ctrl']]} | {f.get('n_jump', '0')} | {rg['keep']:.2f} | {rg['5_10']:.4f} | {fx:.4f} | {fx / rg['5_10']:.2f} | {a:.4f} | {b:.4f} | {b / a - 1:+.0%} | {c:.4f} | {c / a - 1:+.0%} |")
     rows.append((scn, m["ctrl"], rg["5_10"], fx, a, b, c, float(mv["yaw"]), float(s["yaw"]), float(s["pitch"])))
 open(H + "/figs/scn_table.md", "w").write("\n".join(md) + "\n"); print("\n".join(md))
-print("\n좌우 축(2–20 Hz) AMR 정지 → 이동:", "; ".join(f"{r[0]} {r[1]} {r[8]:.4f}→{r[7]:.4f}" for r in rows))
+print("\n좌우 축(2–20 Hz) AMR 정지 → 이동:", "; ".join(f"{r[0]} {r[1]} {r[8]:.4f}→{r[7]:.4f}" for r in rows if r[1] == "pos"))
 pos = {r[0]: r for r in rows if r[1] == "pos"}
 print("위치 모드 대비 비 (실측 5–10 / 재생 고정 5–10 / 재생 AMR 이동 2–20):")
 for r in rows:
-    if r[1] != "pos": p = pos[r[0]]; print(f"  {r[0]} {r[1]}: {r[2] / p[2]:.2f} / {r[3] / p[3]:.2f} / {r[5] / p[5]:.2f}")
+    if r[1] != "pos": p = pos[r[0]]; print(f"  {r[0]} {r[1]}: {r[2] / p[2]:.2f} / {r[3] / p[3]:.2f}")

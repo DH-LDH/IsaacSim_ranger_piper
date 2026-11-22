@@ -25,7 +25,7 @@ ap.add_argument("--case", default="ff10+damp10p"); ap.add_argument("--v", type=f
 ap.add_argument("--susp-k", type=float, default=0.0); ap.add_argument("--susp-c", type=float, default=0.0)
 ap.add_argument("--tire-k", type=float, default=150000.0); ap.add_argument("--tire-c", type=float, default=1000.0)
 ap.add_argument("--slow", type=float, default=1.0); ap.add_argument("--only", action="store_true"); ap.add_argument("--pothole", type=float, default=0.0)
-ap.add_argument("--mount-x", type=float, default=0.0, help="팔 장착 위치를 앞뒤로 옮김[m]. 음수 = 뒷바퀴 쪽. -0.23이면 뒷바퀴 축 바로 위, -0.30이면 차체 뒤 끝 가까이")
+ap.add_argument("--mount-x", type=float, default=-0.23, help="팔 장착 위치를 앞뒤로 옮김[m]. 음수 = 뒷바퀴 쪽. -0.23이면 뒷바퀴 축 바로 위, -0.30이면 차체 뒤 끝 가까이")
 ap.add_argument("--loops", type=int, default=0); ap.add_argument("--shot", default="")
 a = ap.parse_args()
 ZP = 0.04 if a.pothole > 0 else 0.0

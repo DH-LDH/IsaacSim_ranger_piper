@@ -44,6 +44,7 @@ GRIP_JOINTS = ["joint7", "joint8"]
 STEER_JOINTS = ["fl_steering_joint", "fr_steering_joint", "rl_steering_joint", "rr_steering_joint"]
 DRIVE_JOINTS = ["fl_wheel_joint", "fr_wheel_joint", "rl_wheel_joint", "rr_wheel_joint"]
 WHEEL_R = 0.100
+ARM_MOUNT_X = -0.23      # 팔 장착 위치(앞뒤). 뒷바퀴 축 바로 위 — 다한이 실물도 이리 옮기기로 함(2026-11-22). 0이면 차체 가운데(그 결과는 out/center)
 RANGER_REST_Z = 0.280   # 바퀴가 바닥에 닿을 때의 base_link 높이(가라앉은 값 0.277) + 3 mm
 ARM_BASE_LOCAL = (-0.01858, 0.02232, 0.04462)  # Ranger 상판 기준 팔 베이스 위치(step22_common과 같은 값)
 ARM_BASE_YAW_DEG = 90.0  # 실물 장착 방향(step22_common과 같음): 팔 앞이 AMR의 옆(+y). 0이면 팔 앞 = AMR 진행 방향
@@ -76,7 +77,7 @@ def _find(stage, root, name, api=None):
 
 class VibSim:
     def __init__(self, base="fixed", hz=1000, cam_mass=0.11, payload=0.0, K=None, D=None, pose=POSE_A,
-                 wheel_mu=1.0, tire_k=0.0, tire_c=0.0, susp_k=0.0, susp_c=0.0, mount_yaw=ARM_BASE_YAW_DEG, mount_x=0.0, z0=0.0, verbose=True):
+                 wheel_mu=1.0, tire_k=0.0, tire_c=0.0, susp_k=0.0, susp_c=0.0, mount_yaw=ARM_BASE_YAW_DEG, mount_x=ARM_MOUNT_X, z0=0.0, verbose=True):
         self.mount_x, self.z0 = mount_x, z0   # 팔 장착 위치를 앞뒤로 옮김[m](음수 = 뒷바퀴 쪽), 로봇을 놓는 높이[m]
         self.mount_yaw = mount_yaw if base != "fixed" else 0.0
         self.susp_k, self.susp_c = susp_k, susp_c   # 바퀴마다 상하 서스펜션 [N/m, N·s/m] — 0이면 없음(강체 섀시)

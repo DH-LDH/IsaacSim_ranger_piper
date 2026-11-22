@@ -1,0 +1,44 @@
+n_b_h3_v15 --h 0.003 --v 0.15
+n_b_h5_v15 --h 0.005 --v 0.15
+n_b_h8_v15 --h 0.008 --v 0.15
+n_b_h10_v15 --h 0.010 --v 0.15
+n_b_h15_v15 --h 0.015 --v 0.15
+n_b_h3_v30 --h 0.003 --v 0.3
+n_b_h5_v30 --h 0.005 --v 0.3
+n_b_h8_v30 --h 0.008 --v 0.3
+n_b_h10_v30 --h 0.010 --v 0.3
+n_b_h15_v30 --h 0.015 --v 0.3
+n_b_h3_v50 --h 0.003 --v 0.5
+n_b_h5_v50 --h 0.005 --v 0.5
+n_b_h8_v50 --h 0.008 --v 0.5
+n_b_h10_v50 --h 0.010 --v 0.5
+n_b_h15_v50 --h 0.015 --v 0.5
+n_b_len6 --h 0.010 --v 0.3 --blen 0.06
+n_b_len12 --h 0.010 --v 0.3 --blen 0.12
+n_p_d5_l4 --pothole 0.04 --h 0.005 --v 0.3
+n_p_d10_l4 --pothole 0.04 --h 0.010 --v 0.3
+n_p_d20_l4 --pothole 0.04 --h 0.020 --v 0.3
+n_p_d5_l8 --pothole 0.08 --h 0.005 --v 0.3
+n_p_d10_l8 --pothole 0.08 --h 0.010 --v 0.3
+n_p_d20_l8 --pothole 0.08 --h 0.020 --v 0.3
+n_p_d10_l6_v15 --pothole 0.06 --h 0.010 --v 0.15
+n_t_80k --h 0.010 --v 0.3 --tire-k 80000 --tire-c 730
+n_t_300k --h 0.010 --v 0.3 --tire-k 300000 --tire-c 1414
+n_s_60k --h 0.010 --v 0.3 --susp-k 60000 --susp-c 440
+n_side_h10 --h 0.010 --v 0.3 --side 1
+n_side_h5 --h 0.005 --v 0.3 --side 1
+n_poseB --h 0.010 --v 0.3 --pose B
+y_yaw0_bump --h 0.010 --v 0.3 --yaw 0
+y_yaw180_bump --h 0.010 --v 0.3 --yaw 180
+y_yaw0_pot --pothole 0.06 --h 0.010 --v 0.3 --yaw 0
+y_yaw180_pot --pothole 0.06 --h 0.010 --v 0.3 --yaw 180
+q_dead002 --h 0.010 --v 0.3 --dq-dead 0.02
+q_dead005 --h 0.010 --v 0.3 --dq-dead 0.05
+q_dead010 --h 0.010 --v 0.3 --dq-dead 0.10
+q_dead020 --h 0.010 --v 0.3 --dq-dead 0.20
+q_step001 --h 0.010 --v 0.3 --dq-step 0.01
+q_step005 --h 0.010 --v 0.3 --dq-step 0.05
+q_step010 --h 0.010 --v 0.3 --dq-step 0.10
+q_dead005_small --h 0.005 --v 0.15 --dq-dead 0.05
+v_h5_v10 --h 0.005 --v 0.1
+v_h10_v10 --h 0.010 --v 0.1

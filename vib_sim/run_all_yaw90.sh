@@ -16,7 +16,7 @@ lane1() {
 }
 lane2() {
   sleep 20
-  for k in 10000 20000 35700 60000 85000 120000 200000 400000; do
+  for k in 10000 20000 30000 45000 60000 85000 120000 200000 400000; do
     c=$(python3 -c "print(round(340*($k/35700)**0.5))")
     timeout 300 $P exp2_base.py --accels 1.0 --Tas 0.5 --cases none,scurve,zv,zvd --sf $SF --susp-k $k --susp-c $c --tag susp$k --keep > out/exp2_susp$k.log 2>&1
   done

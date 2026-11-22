@@ -29,7 +29,7 @@ ap.add_argument("--susp-k", type=float, default=0.0); ap.add_argument("--susp-c"
 ap.add_argument("--tire-k", type=float, default=150000.0, help="타이어(접촉) 강성[N/m], 0이면 강체 바퀴"); ap.add_argument("--tire-c", type=float, default=1000.0)
 ap.add_argument("--lp", type=float, default=40.0, help="IMU 저역 통과[Hz]"); ap.add_argument("--zadd", type=float, default=0.3, help="되먹임으로 더하려는 감쇠비")
 ap.add_argument("--fp", type=float, default=7.5); ap.add_argument("--fy", type=float, default=4.1)
-ap.add_argument("--mount-x", type=float, default=0.0, help="팔 장착 위치를 앞뒤로 옮김[m]. -0.20이면 뒷바퀴 축(-0.247) 가까이")
+ap.add_argument("--mount-x", type=float, default=-0.23, help="팔 장착 위치를 앞뒤로 옮김[m]. -0.20이면 뒷바퀴 축(-0.247) 가까이")
 ap.add_argument("--pothole", type=float, default=0.0, help="0보다 크면 턱 대신 패인 곳: 길이[m] (깊이는 --h)")
 ap.add_argument("--tag", default="bump"); ap.add_argument("--keep", action="store_true")
 a = ap.parse_args()
