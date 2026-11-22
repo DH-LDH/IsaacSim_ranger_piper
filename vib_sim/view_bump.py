@@ -8,6 +8,7 @@
   --case   + 로 이어 붙인다:  ffN(베이스 IMU 피드포워드, 지연 N ms) / dampN(끝단 자이로 되먹임) / dampNp(+ 위상 예측)
            prev(뒷바퀴 예측: 앞바퀴 때 잰 것을 뒷바퀴 시각에 그대로) / prevzE10(상하·끄덕임 성분만 예측, 10 ms 늦게 — ffN과 같이 쓴다)
   --pothole 0.06  턱 대신 패인 바닥(길이 m, 깊이는 --h)
+  --mount-x -0.23 팔을 뒷바퀴 쪽으로 옮김(m). 0 = 가운데, -0.23 = 뒷바퀴 축 바로 위, -0.30 = 차체 뒤 끝 가까이
   --h 0.01 턱 높이[m]   --v 0.3 속도[m/s]   --slow 2 두 배 느리게   --only 번갈아 틀지 않고 그 조건만
 대책 없음 → 대책 적용 순으로 번갈아 튼다. 터미널에 그때마다 끝단 진동(세 축 2–20 Hz)과 대책 없음 대비 비가 찍힌다.
 바퀴와 턱이 강체라 충격이 실물보다 날카롭고, 모터 쪽이 보정 명령을 그대로 따라간다고 본 이상적인 경우다.
@@ -24,10 +25,11 @@ ap.add_argument("--case", default="ff10+damp10p"); ap.add_argument("--v", type=f
 ap.add_argument("--susp-k", type=float, default=0.0); ap.add_argument("--susp-c", type=float, default=0.0)
 ap.add_argument("--tire-k", type=float, default=150000.0); ap.add_argument("--tire-c", type=float, default=1000.0)
 ap.add_argument("--slow", type=float, default=1.0); ap.add_argument("--only", action="store_true"); ap.add_argument("--pothole", type=float, default=0.0)
+ap.add_argument("--mount-x", type=float, default=0.0, help="팔 장착 위치를 앞뒤로 옮김[m]. 음수 = 뒷바퀴 쪽. -0.23이면 뒷바퀴 축 바로 위, -0.30이면 차체 뒤 끝 가까이")
 ap.add_argument("--loops", type=int, default=0); ap.add_argument("--shot", default="")
 a = ap.parse_args()
 ZP = 0.04 if a.pothole > 0 else 0.0
-sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, tire_k=a.tire_k, tire_c=a.tire_c, z0=ZP, verbose=False)
+sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, tire_k=a.tire_k, tire_c=a.tire_c, z0=ZP, mount_x=a.mount_x, verbose=False)
 XB, LWB, DT, NB = 0.75, 0.494, sim.dt, 200
 def box(name, x0, x1, top, color):
     c = UsdGeom.Cube.Define(sim.stage, "/World/" + name); c.CreateSizeAttr(1.0); c.CreateDisplayColorAttr([Gf.Vec3f(*color)])
@@ -117,7 +119,7 @@ def run(case, first):
     return v_all, ax, rms(tf - 0.1, tr_ - 0.1)[0], rms(tr_ - 0.1, tr_ + 1.5)[0]
 
 
-print(f"\n턱 높이 {a.h * 1000:g} mm, 속도 {a.v:g} m/s, 조건 {a.case}" + ("" if a.only or a.case == "none" else " (대책 없음과 번갈아)"), flush=True)
+print(f"\n턱 높이 {a.h * 1000:g} mm, 속도 {a.v:g} m/s, 팔 위치 {a.mount_x:+.2f} m, 조건 {a.case}" + ("" if a.only or a.case == "none" else " (대책 없음과 번갈아)"), flush=True)
 k = 0; base = None
 try:
     while app.is_running() and (a.loops == 0 or k < a.loops):
