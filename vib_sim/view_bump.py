@@ -5,7 +5,9 @@
   ~/isaacsim/python.sh view_bump.py --case damp36             # 예측 없는 되먹임, 지연 36 ms (발산하는 경우)
   ~/isaacsim/python.sh view_bump.py --case none               # 대책 없음만
 
-  --case   + 로 이어 붙인다:  ffN(베이스 IMU 피드포워드, 지연 N ms) / dampN(끝단 자이로 되먹임) / dampNp(+ 위상 예측) / prev(뒷바퀴 예측)
+  --case   + 로 이어 붙인다:  ffN(베이스 IMU 피드포워드, 지연 N ms) / dampN(끝단 자이로 되먹임) / dampNp(+ 위상 예측)
+           prev(뒷바퀴 예측: 앞바퀴 때 잰 것을 뒷바퀴 시각에 그대로) / prevzE10(상하·끄덕임 성분만 예측, 10 ms 늦게 — ffN과 같이 쓴다)
+  --pothole 0.06  턱 대신 패인 바닥(길이 m, 깊이는 --h)
   --h 0.01 턱 높이[m]   --v 0.3 속도[m/s]   --slow 2 두 배 느리게   --only 번갈아 틀지 않고 그 조건만
 대책 없음 → 대책 적용 순으로 번갈아 튼다. 터미널에 그때마다 끝단 진동(세 축 2–20 Hz)과 대책 없음 대비 비가 찍힌다.
 바퀴와 턱이 강체라 충격이 실물보다 날카롭고, 모터 쪽이 보정 명령을 그대로 따라간다고 본 이상적인 경우다.
@@ -21,14 +23,22 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--case", default="ff10+damp10p"); ap.add_argument("--v", type=float, default=0.3); ap.add_argument("--h", type=float, default=0.01)
 ap.add_argument("--susp-k", type=float, default=0.0); ap.add_argument("--susp-c", type=float, default=0.0)
 ap.add_argument("--tire-k", type=float, default=150000.0); ap.add_argument("--tire-c", type=float, default=1000.0)
-ap.add_argument("--slow", type=float, default=1.0); ap.add_argument("--only", action="store_true")
+ap.add_argument("--slow", type=float, default=1.0); ap.add_argument("--only", action="store_true"); ap.add_argument("--pothole", type=float, default=0.0)
 ap.add_argument("--loops", type=int, default=0); ap.add_argument("--shot", default="")
 a = ap.parse_args()
-sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, tire_k=a.tire_k, tire_c=a.tire_c, verbose=False)
+ZP = 0.04 if a.pothole > 0 else 0.0
+sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, tire_k=a.tire_k, tire_c=a.tire_c, z0=ZP, verbose=False)
 XB, LWB, DT, NB = 0.75, 0.494, sim.dt, 200
-cube = UsdGeom.Cube.Define(sim.stage, "/World/bump"); cube.CreateSizeAttr(1.0); cube.CreateDisplayColorAttr([Gf.Vec3f(0.9, 0.25, 0.1)])
-x = UsdGeom.Xformable(cube); x.AddTranslateOp().Set(Gf.Vec3d(XB, 0.0, 0.0)); x.AddScaleOp().Set(Gf.Vec3f(0.03, 2.0, 2 * a.h))
-UsdPhysics.CollisionAPI.Apply(cube.GetPrim())
+def box(name, x0, x1, top, color):
+    c = UsdGeom.Cube.Define(sim.stage, "/World/" + name); c.CreateSizeAttr(1.0); c.CreateDisplayColorAttr([Gf.Vec3f(*color)])
+    xf = UsdGeom.Xformable(c); xf.AddTranslateOp().Set(Gf.Vec3d((x0 + x1) / 2, 0.0, top - 0.05)); xf.AddScaleOp().Set(Gf.Vec3f(x1 - x0, 2.0, 0.1))
+    UsdPhysics.CollisionAPI.Apply(c.GetPrim())
+
+
+if a.pothole > 0:
+    box("deck_a", -2.0, XB, ZP, (0.55, 0.6, 0.65)); box("deck_hole", XB, XB + a.pothole, ZP - a.h, (0.9, 0.25, 0.1)); box("deck_b", XB + a.pothole, XB + a.pothole + 4.0, ZP, (0.55, 0.6, 0.65))
+else:
+    box("bump", XB - 0.015, XB + 0.015, a.h, (0.9, 0.25, 0.1))
 try:
     UsdLux.DomeLight.Define(sim.stage, "/World/dome").CreateIntensityAttr(800.0)
     from isaacsim.core.utils.viewports import set_camera_view
@@ -46,7 +56,8 @@ ZADD, FP, FY, LP = 0.3, 7.5, 4.1, 40.0
 def run(case, first):
     tok = case.split("+")
     ffd = next((int(t[2:]) for t in tok if t.startswith("ff")), None)
-    prev = any(t.startswith("prev") for t in tok)
+    pv = next((t for t in tok if t.startswith("prev")), None); prev = pv is not None; pz = bool(pv and pv.startswith("prevz"))
+    perr = int(pv[6 if pz else 5:]) if pv and len(pv) > (5 if pz else 4) else 0
     dmp = next((t for t in tok if t.startswith("damp")), None)
     dd = int(dmp[4:].rstrip("p")) if dmp else None; dpred = bool(dmp and dmp.endswith("p"))
     sim.world.reset(); sim._apply_gains(); sim.set_state(POSE_A)
@@ -65,10 +76,13 @@ def run(case, first):
             dq = np.zeros(6)
             pb_ = np.asarray(sim.bb.get_world_poses()[0])[0][0]
             if t_f is None and pb_ + LWB / 2 >= XB - 0.06:
-                t_f = t[i]; rec = [b.copy() for b in abuf[-30:]]; i_rear = i + int(round(LWB / a.v / DT)) - 30
+                t_f = t[i]; rec = [b.copy() for b in abuf[-30:]]; i_rear = i + int(round((LWB / a.v + perr / 1000.0) / DT)) - 30
+                print(f"      앞바퀴가 턱에 닿음 {t_f:.2f} s → 뒷바퀴는 {t_f + LWB / a.v:.2f} s쯤", flush=True)
             elif t_f is not None and len(rec) < 700:
                 rec.append(af.copy())
-            if prev and i_rear is not None and 0 <= i - i_rear < len(rec):
+            if prev and pz and i_rear is not None and 0 <= i - i_rear < len(rec):
+                am = abuf[-1 - (ffd if ffd is not None else 0)].copy(); am[[2, 4]] = (FLIP * rec[i - i_rear])[[2, 4]]; dq += FF @ am
+            elif prev and i_rear is not None and 0 <= i - i_rear < len(rec):
                 dq += FF @ (FLIP * rec[i - i_rear])
             elif ffd is not None:
                 dq += FF @ abuf[-1 - ffd]
@@ -93,9 +107,14 @@ def run(case, first):
             for _ in range(10):
                 app.update()
             print("화면 저장:", a.shot)
-    tf = t_f if t_f is not None else 0.0; m = (t >= tf - 0.1) & (t < tf + LWB / a.v + 1.5)
-    ax = np.sqrt(np.mean(np.stack([band(G[m, c], sim.hz, 2.0, 20.0) for c in range(3)], axis=1) ** 2, axis=0))
-    return float(np.sqrt(np.sum(ax ** 2))), ax
+    tf = t_f if t_f is not None else 0.0; tr_ = tf + LWB / a.v
+
+    def rms(t0, t1):
+        m = (t >= t0) & (t < t1)
+        ax = np.sqrt(np.mean(np.stack([band(G[m, c], sim.hz, 2.0, 20.0) for c in range(3)], axis=1) ** 2, axis=0))
+        return float(np.sqrt(np.sum(ax ** 2))), ax
+    v_all, ax = rms(tf - 0.1, tr_ + 1.5)
+    return v_all, ax, rms(tf - 0.1, tr_ - 0.1)[0], rms(tr_ - 0.1, tr_ + 1.5)[0]
 
 
 print(f"\n턱 높이 {a.h * 1000:g} mm, 속도 {a.v:g} m/s, 조건 {a.case}" + ("" if a.only or a.case == "none" else " (대책 없음과 번갈아)"), flush=True)
@@ -104,11 +123,11 @@ try:
     while app.is_running() and (a.loops == 0 or k < a.loops):
         cases = [a.case] if (a.only or a.case == "none") else ["none", a.case]
         for c in cases:
-            v, ax = run(c, k == 0 and c == cases[-1])
+            v, ax, vf, vr = run(c, k == 0 and c == cases[-1])
             if c == "none":
-                base = v
-            print(f"[{k + 1}] {'대책 없음' if c == 'none' else c:14s} 끝단 진동 {v:.4f} rad/s (비틀림 {ax[0]:.3f}, 끄덕임 {ax[1]:.3f}, 좌우 {ax[2]:.3f})"
-                  + (f" → 대책 없음의 {v / base:.2f}배" if c != "none" and base else ""), flush=True)
+                base = (v, vf, vr)
+            print(f"[{k + 1}] {'대책 없음' if c == 'none' else c:14s} 끝단 진동 {v:.4f} rad/s (앞바퀴 구간 {vf:.4f}, 뒷바퀴 구간 {vr:.4f})"
+                  + (f" → 대책 없음의 {v / base[0]:.2f}배 (앞 {vf / base[1]:.2f}, 뒤 {vr / base[2]:.2f})" if c != "none" and base else ""), flush=True)
         k += 1
 except KeyboardInterrupt:
     pass
