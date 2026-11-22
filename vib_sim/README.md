@@ -21,6 +21,7 @@ python3 fit_servo.py                            # 서보 모형을 실측 명령
 - 눈으로 보기: `VIBSIM_GUI=1 ~/isaacsim/python.sh view.py --scene amr --case none` (옵션은 `view.py` 맨 위 설명). 실험 스크립트(exp1·exp2)는 화면을 그리지 않는다.
 - 실측 기록 재생을 눈으로 보기: `~/isaacsim/python.sh view_replay.py --scn 1 --ctrl pos --base move` (시나리오 1·2·3 × pos·tde·asmc × 베이스 fixed·still·move·zvd, 옵션은 파일 맨 위 설명).
 - 모터 쪽 동역학 1차 모형(MIT 펌웨어 PD + 정지 마찰): `exp4_mit.py --exp fit|base`. **실측과 대조가 안 된 상태**(정지 마찰 크기를 모름) — 결과로 쓰지 않는다.
+- 턱 넘기 예비 시험(베이스 IMU 피드포워드를 지연별로): `exp5_bump.py`. 바퀴·턱이 강체라 크기는 못 믿고 조건끼리의 비만 본다.
 - 직접 명령 넣기: `~/isaacsim/python.sh drive.py` (또는 `--scene fixed`). 창이 뜬 뒤 터미널에 `v 0.5`, `stop`, `jr 2 -10`, `shape zvd` 같은 명령을 친다. 명령 목록은 `help`.
 - Isaac을 한꺼번에 여러 개 띄우면 시작 단계에서 멈추는 일이 있었다(8개 동시 실행 때 4개). 3개까지는 문제없었다.
 - 속도: 물리 1 kHz, 초당 약 1,400 스텝(실시간의 1.4배). USD 되쓰기를 꺼서 얻은 값이다(`vibsim.py` 위쪽 설정).
