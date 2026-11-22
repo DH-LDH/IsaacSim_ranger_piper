@@ -16,6 +16,8 @@ AMR이 등속으로 가다가 바닥의 턱(높이 --h, 길이 3 cm, 앞바퀴 �
             mapE3 = 턱 위치를 3 mm 뒤로 잘못 앎(E-3은 앞으로), mapS70 = 턱 크기를 잘못 알아 파형을 0.7배로 넣음, mapservo = 위치 모드 서보로(서보 지연만큼 앞당겨 넣음)
             prevz = 상하·끄덕임 성분만 예측하고 앞뒤 방향 가속도 등 나머지는 잰 값(ffN과 같이 씀). prevzE10 = 10 ms 늦게
   dampN     끝단 자이로 되먹임 감쇠, 지연 N ms.  끄덕임 → J5, 좌우 → J1 모터 쪽을 각속도 반대 방향으로 민다(감쇠비 +0.3 상당)
+  dampJ     실기처럼: 100 Hz로 계산, 표본 나이가 매번 다름(중앙 22.5 ms, 95% 48.7 ms), 나이를 알고 그만큼 위상을 앞당김.
+            dampJn = 앞당기지 않음, dampJs = 나이가 40 ms를 넘는 주기는 되먹임을 끔, dampJg = 나이에 반비례해 세기를 줄임
   dampNp    같은 되먹임에 위상 예측: 울림이 한 주파수(끄덕임 7.5 Hz, 좌우 4.1 Hz)라고 보고 N ms 뒤의 값을 계산해 쓴다
 출력: out/exp5_<tag>.csv — 끝단 자이로 세 축 2–20 Hz rms: 전체 / 앞바퀴 구간 / 뒷바퀴 구간.
 타이어 탄성은 접촉 강성(--tire-k, 기본 150 kN/m)으로 넣는다. 실물 타이어 값은 모른다 — 절댓값이 아니라 조건끼리의 비로 본다.
@@ -38,6 +40,8 @@ ap.add_argument("--yaw", type=float, default=90.0, help="팔 장착 방향[deg]:
 ap.add_argument("--blen", type=float, default=0.03, help="턱 길이[m]"); ap.add_argument("--side", type=int, default=0, help="1이면 왼쪽 바퀴만 넘는 턱")
 ap.add_argument("--pose", default="A"); ap.add_argument("--dq-step", type=float, default=0.0, help="보정각 분해능[deg]"); ap.add_argument("--dq-dead", type=float, default=0.0, help="보정각 불감대[deg]")
 ap.add_argument("--lib-from", default="", help="지도 예견에 쓸 베이스 가속도 지도를 다른 실행(태그)에서 가져온다 — 다른 크기·속도의 턱에서 만든 지도를 쓰는 경우")
+ap.add_argument("--seed", type=int, default=1)
+ap.add_argument("--replay", default="", help="팔을 유지하는 대신 실측 엔코더 기록(csv.gz)을 재생하면서 넘는다"); ap.add_argument("--replay-t0", type=float, default=8.0)
 ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
 ap.add_argument("--tag", default="bump"); ap.add_argument("--keep", action="store_true")
 a = ap.parse_args()
@@ -64,6 +68,13 @@ M = sim.mass_matrix(); off = M.shape[0] - sim.n
 FF = M[off + sim.ia][:, :6] / sim.K[:, None]  # 베이스 가속도(병진 xyz, 회전 xyz) → 모터 쪽 보정각
 FLIP = np.array([1, 1, 1, 1, -1, 1.0])        # 뒷바퀴가 넘을 때: 차체 끄덕임(wy)만 부호 반대
 DT = sim.dt; NB = 200; LIB = None; CORR = float("nan")
+RQ = RV = None
+if a.replay:
+    import csv as _csv, gzip as _gz
+    with _gz.open(a.replay, "rt") as _f: _r = list(_csv.DictReader(_f))
+    _t = np.array([float(x["t"]) for x in _r]); _t = _t - _t[0]; _q = np.radians(np.array([[float(x[f"q{j}"]) for j in range(1, 7)] for x in _r]))
+    _tt = np.arange(a.replay_t0, _t[-1], DT); RQ = np.stack([np.interp(_tt, _t, _q[:, j]) for j in range(6)], axis=1)
+    RV = np.gradient(RQ, DT, axis=0); _k = np.ones(25) / 25.0; RV = np.stack([np.convolve(RV[:, j], _k, "same") for j in range(6)], axis=1)
 
 
 def run(case):
@@ -77,10 +88,15 @@ def run(case):
     mp_e = float(mp[4:]) / 1000.0 if mp and mp.startswith("mapE") else 0.0; mp_s = float(mp[4:]) / 100.0 if mp and mp.startswith("mapS") else 1.0
     mp_servo = mp == "mapservo"; servo = servo or mp_servo
     dmp = next((t for t in tok if t.startswith("damp")), None)
+    dj = dmp[5:] if dmp and dmp.startswith("dampJ") else None        # 실기처럼: 100 Hz 주기, 표본 나이가 매번 다름
+    if dj is not None:
+        dmp = None
     dd = int(dmp[4:].rstrip("p")) if dmp else None; dpred = bool(dmp and dmp.endswith("p"))
-    sim.world.reset(); sim._apply_gains(); sim.set_state(POSE_A); sv = PosServo(POSE_A, DT)
+    rng = np.random.default_rng(a.seed); dq_fb = np.zeros(6); ages = []
+    P0_ = RQ[0] if RQ is not None else POSE_A
+    sim.world.reset(); sim._apply_gains(); sim.set_state(P0_); sv = PosServo(POSE_A, DT)
     for _ in range(2500):
-        sim.step(POSE_A, np.zeros(6), wheel_w=np.zeros(4), steer=np.zeros(4))
+        sim.step(P0_, np.zeros(6), wheel_w=np.zeros(4), steer=np.zeros(4))
     T = 0.3 + (XB + 0.3 + 0.5) / a.v + 2.0; n = int(T * sim.hz); t = np.arange(n) * DT
     G = np.zeros((n, 3)); XBASE = np.zeros(n); DQ = np.zeros((n, 6)); A6 = np.zeros((n, 6))
     v_prev = np.zeros(6); af = np.zeros(6); gf = np.zeros(3); al = 1 - math.exp(-2 * math.pi * a.lp * DT)
@@ -122,11 +138,24 @@ def run(case):
                     ph = w * (dd / 1000.0 + lp_lag)
                     val = s0[ax_] * math.cos(ph) + ds[ax_] / w * math.sin(ph)   # 한 주파수 울림이라고 보고 앞당김
                 dq[j] += -(2 * a.zadd / w) * val
+        if dj is not None:
+            if i % 10 == 0:                                            # 10 ms마다 한 번 계산하고 그 사이에는 값을 유지
+                age = int(np.clip(rng.lognormal(math.log(22.5), 0.469), 8, 150)); ages.append(age)   # 중앙 22.5 ms, 95% 48.7 ms
+                s0 = gbuf[-1 - age]; ds = (s0 - gbuf[-1 - age - 4]) / (4 * DT)
+                gfac = 0.0 if ("s" in dj and age > 40) else (min(1.0, 25.0 / age) if "g" in dj else 1.0)
+                for ax_, j, f in ((1, 4, a.fp), (2, 0, a.fy)):
+                    w = 2 * math.pi * f; val = s0[ax_]
+                    if "n" not in dj:                                  # 표본 나이를 알고 그만큼 앞당김
+                        ph = w * (age / 1000.0 + lp_lag + 0.005); val = s0[ax_] * math.cos(ph) + ds[ax_] / w * math.sin(ph)
+                    dq_fb[j] = -(2 * a.zadd / w) * val * gfac
+            dq = dq + dq_fb
         if a.dq_dead > 0:
             dq = np.where(np.abs(dq) < math.radians(a.dq_dead), 0.0, dq)
         if a.dq_step > 0:
             st_ = math.radians(a.dq_step); dq = np.round(dq / st_) * st_
-        if servo:
+        if RQ is not None:                                             # 팔이 움직이는 중: 재생 각도 위에 보정을 더한다
+            ii = min(i, len(RQ) - 1); q, w_ = RQ[ii] + dq, RV[ii]
+        elif servo:
             q, w_ = sv.step(POSE_A + dq)
         else:
             q, w_ = POSE_A + dq, np.zeros(6)
