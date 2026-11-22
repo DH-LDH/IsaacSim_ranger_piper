@@ -69,7 +69,21 @@ def load(path):
     t = np.array([float(x["t"]) for x in r]); q = np.radians(np.array([[float(x[f"q{j}"]) for j in range(1, 7)] for x in r]))
     ph = [x["phase"] for x in r]
     holds = [t[i] for i in range(1, len(r)) if ph[i] == "hold" and ph[i - 1] != "hold"]
-    return t - t[0], q, [h - t[0] for h in holds]
+    return t - t[0], q, [h - t[0] for h in holds], float(t[0])
+
+
+def jumps_of(stem):
+    """MIT 순간 튐의 제외 구간 [(from, to)] — piper_ws docs/data/raw/mit_jumps.csv, 시각은 기록 CSV의 t 기준."""
+    p = os.path.expanduser("~/piper_ws/docs/data/raw/mit_jumps.csv")
+    if not os.path.exists(p):
+        return []
+    return [(float(r["exclude_from"]), float(r["exclude_to"])) for r in csv.DictReader(open(p)) if r["stem"] == stem]
+
+
+def masked_rms(G, t, keep, lo, hi):
+    """세 축을 전체 구간에서 대역 통과한 뒤 keep인 표본만으로 축별 rms."""
+    B = np.stack([band(G[:, k], sim.hz, lo, hi) for k in range(3)], axis=1)
+    return np.sqrt(np.mean(B[keep] ** 2, axis=0))
 
 
 def run(arm, case, tstop_ms=None):
@@ -81,7 +95,7 @@ def run(arm, case, tstop_ms=None):
         q0 = POSE_A.copy(); sv = PosServo(q0, sim.dt); T = LEAD + a.cycles / a.hz + TAIL; w = 2 * math.pi * a.hz; joints = SCN[arm[1]]
         t0w, t1w = LEAD, LEAD + a.cycles / a.hz; holds = []
     else:
-        tr, qr, holds = load(arm[1]); q0 = qr[0].copy(); T = tr[-1]
+        tr, qr, holds, tcsv0 = load(arm[1]); q0 = qr[0].copy(); T = tr[-1]
         tt = np.arange(0, T, sim.dt); Q = np.stack([np.interp(tt, tr, qr[:, j]) for j in range(6)], axis=1)
         V = np.gradient(Q, sim.dt, axis=0); k = np.ones(25) / 25.0; V = np.stack([np.convolve(V[:, j], k, "same") for j in range(6)], axis=1)
         t0w, t1w = 0.5, T - 0.5
@@ -101,11 +115,17 @@ def run(arm, case, tstop_ms=None):
         sim.step(q, dq, **kw(base_v(t[i] - 0.3, case)))
         G[i] = sim.ee_gyro(); QM[i] = q
     m = (t >= t0w) & (t < t1w)
-    B5 = np.stack([band(G[m, k], sim.hz, 5.0, 10.0) for k in range(3)], axis=1)
+    excl = jumps_of(os.path.basename(arm[1]).replace(".csv.gz", "").replace(".csv", "")) if arm[0] == "replay" else []
+    keep = m.copy()
+    for a0, a1 in excl:                       # 튐 구간(튐 −0.1 s – +1.2 s)을 뺀다. 시각을 기록 시작 기준으로 옮김
+        keep &= ~((t >= a0 - tcsv0) & (t < a1 - tcsv0))
+    r5 = masked_rms(G[m], t[m], keep[m], 5.0, 10.0); r2 = masked_rms(G[m], t[m], keep[m], 2.0, 20.0)
+    a5 = masked_rms(G[m], t[m], np.ones(int(m.sum()), bool), 5.0, 10.0)
     mm = stop_metrics3(t, G, t0w, win=t1w - t0w, fs=sim.hz)
     row = dict(src=arm[0], arm=os.path.basename(arm[1]).split(".")[0] if arm[0] == "replay" else arm[1], base=case,
-               move_vec_5_10=float(np.sqrt(np.sum(np.mean(B5 ** 2, axis=0)))), move_pitch_5_10=float(np.sqrt(np.mean(B5[:, 1] ** 2))),
-               move_vec_2_20=mm["vec_rms"], roll=mm["roll_rms"], pitch=mm["pitch_w_rms"], yaw=mm["yaw_rms"], f=mm["f_dom"], axis=mm["axis"])
+               move_vec_5_10=float(np.sqrt(np.sum(r5 ** 2))), move_pitch_5_10=float(r5[1]),
+               move_vec_2_20=float(np.sqrt(np.sum(r2 ** 2))), roll=float(r2[0]), pitch=float(r2[1]), yaw=float(r2[2]), f=mm["f_dom"], axis=mm["axis"],
+               n_jump=len(excl), keep_frac=float(keep[m].mean()), all_vec_5_10=float(np.sqrt(np.sum(a5 ** 2))))
     if holds and tstop_ms is not None:   # 정지 창: 엔코더 정지(hold 시작 + 정지 지연)부터 2 s, 끄덕임 5–10 Hz
         vals = [stop_metrics3(t, G, h + tstop_ms / 1000.0, fs=sim.hz)["pitch_rms"] for h in holds if h + tstop_ms / 1000.0 + 2.0 < T]
         row["stop_pitch_5_10"] = float(np.median(vals)) if vals else float("nan"); row["n_stop"] = len(vals)
