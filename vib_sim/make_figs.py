@@ -130,7 +130,6 @@ for k in kss:
 ss_ = []
 for p in sorted(glob.glob(O + "/exp2_susp*.csv")):
     ss_ += rd(p)
-ss_ = [r for r in ss_ if not 30000 <= r["susp_k"] <= 45000]   # 이 구간은 등속 중에도 차체가 스스로 흔들리는 불안정이 나와 뺀다(아래 주)
 if ss_:
     ks = sorted({r["susp_k"] for r in ss_})
     fig, ax = plt.subplots(1, 2, figsize=(5.2, 2.1))
@@ -144,7 +143,6 @@ if ss_:
     fig.tight_layout(); fig.savefig(F + "/fig_susp.png"); plt.close(fig)
     md.append("\n## 3. 서스펜션 민감도 — 실물 장착 방향 (바퀴마다 상하 스프링·댐퍼, 감쇠는 강성의 제곱근에 비례)\n")
     md.append("실물 Ranger Mini의 서스펜션·타이어 값은 모른다. '강체 대비'는 2절 값 대비.\n")
-    md.append("바퀴당 30–45 kN/m에서는 등속 중에도 차체가 스스로 흔들리고(끝단 비틀림 약 1 rad/s) 이동 거리가 1.0 m가 아니라 0.87 m로 나온다. 바퀴 속도 구동 모형과 서스펜션이 맞물린 불안정으로 보이며 실물의 성질인지는 모른다. 표와 그림에서 뺐다.\n")
     md.append("| 강성 [kN/m] | 섀시 끄덕임 봉우리 [Hz] | 대책 없음 rms (강체 대비) | 축별(비틀림 / 끄덕임 / 좌우) | 최대 (강체 대비) | scurve 비 | zv 비 | zvd 비 |\n|---|---|---|---|---|---|---|---|")
     for k in ks:
         g = {r["case"]: r for r in ss_ if r["susp_k"] == k}

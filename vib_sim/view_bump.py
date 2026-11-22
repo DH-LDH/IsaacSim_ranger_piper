@@ -19,11 +19,12 @@ from pxr import Gf, UsdGeom, UsdPhysics, UsdLux
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--case", default="ff10+damp10p"); ap.add_argument("--v", type=float, default=0.3); ap.add_argument("--h", type=float, default=0.01)
-ap.add_argument("--susp-k", type=float, default=120000.0); ap.add_argument("--susp-c", type=float, default=623.0)
+ap.add_argument("--susp-k", type=float, default=0.0); ap.add_argument("--susp-c", type=float, default=0.0)
+ap.add_argument("--tire-k", type=float, default=150000.0); ap.add_argument("--tire-c", type=float, default=1000.0)
 ap.add_argument("--slow", type=float, default=1.0); ap.add_argument("--only", action="store_true")
 ap.add_argument("--loops", type=int, default=0); ap.add_argument("--shot", default="")
 a = ap.parse_args()
-sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, verbose=False)
+sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, tire_k=a.tire_k, tire_c=a.tire_c, verbose=False)
 XB, LWB, DT, NB = 0.75, 0.494, sim.dt, 200
 cube = UsdGeom.Cube.Define(sim.stage, "/World/bump"); cube.CreateSizeAttr(1.0); cube.CreateDisplayColorAttr([Gf.Vec3f(0.9, 0.25, 0.1)])
 x = UsdGeom.Xformable(cube); x.AddTranslateOp().Set(Gf.Vec3d(XB, 0.0, 0.0)); x.AddScaleOp().Set(Gf.Vec3f(0.03, 2.0, 2 * a.h))
@@ -62,7 +63,8 @@ def run(case, first):
             af = af + al * (a6 - af); abuf.append(af.copy()); abuf.pop(0)
             g_now = sim.ee_gyro(); gf = gf + al * (g_now - gf); gbuf.append(gf.copy()); gbuf.pop(0)
             dq = np.zeros(6)
-            if t_f is None and t[i] > 0.6 and abs(af[2]) > 1.5:
+            pb_ = np.asarray(sim.bb.get_world_poses()[0])[0][0]
+            if t_f is None and pb_ + LWB / 2 >= XB - 0.06:
                 t_f = t[i]; rec = [b.copy() for b in abuf[-30:]]; i_rear = i + int(round(LWB / a.v / DT)) - 30
             elif t_f is not None and len(rec) < 700:
                 rec.append(af.copy())

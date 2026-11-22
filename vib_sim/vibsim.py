@@ -44,6 +44,7 @@ GRIP_JOINTS = ["joint7", "joint8"]
 STEER_JOINTS = ["fl_steering_joint", "fr_steering_joint", "rl_steering_joint", "rr_steering_joint"]
 DRIVE_JOINTS = ["fl_wheel_joint", "fr_wheel_joint", "rl_wheel_joint", "rr_wheel_joint"]
 WHEEL_R = 0.100
+RANGER_REST_Z = 0.280   # 바퀴가 바닥에 닿을 때의 base_link 높이(가라앉은 값 0.277) + 3 mm
 ARM_BASE_LOCAL = (-0.01858, 0.02232, 0.04462)  # Ranger 상판 기준 팔 베이스 위치(step22_common과 같은 값)
 ARM_BASE_YAW_DEG = 90.0  # 실물 장착 방향(step22_common과 같음): 팔 앞이 AMR의 옆(+y). 0이면 팔 앞 = AMR 진행 방향
 CAM_POS_L6 = (-0.0115, 0.0731, 0.05)  # 손목 카메라 위치(link6 기준, step22_common EIH_MOUNT_POS)
@@ -120,8 +121,10 @@ class VibSim:
         else:
             root = "/World/Ranger"
             add_reference_to_stage(usd_path=RANGER_USD, prim_path=root)
-            if z0 != 0.0:
-                UsdGeom.XformCommonAPI(st.GetPrimAtPath(root)).SetTranslate(Gf.Vec3d(0, 0, z0))
+            # 바퀴가 바닥에 닿는 높이에서 시작한다. 예전에는 0에 놓아 바퀴가 바닥에 묻힌 채 시작했고,
+            # 그 반발로 차체가 0.3–0.6 m 튀어 오른 뒤(서스펜션이 있으면 18.7° 틀어져) 내려앉았다(2026-11-22 다한이 화면에서 발견).
+            z0 = z0 + RANGER_REST_Z
+            UsdGeom.XformCommonAPI(st.GetPrimAtPath(root)).SetTranslate(Gf.Vec3d(0, 0, z0))
             ABL = (ARM_BASE_LOCAL[0] + mount_x, ARM_BASE_LOCAL[1], ARM_BASE_LOCAL[2])
             rb = _find(st, root, "base_link", UsdPhysics.RigidBodyAPI)
             for p in Usd.PrimRange(st.GetPrimAtPath("/World/piper")):
