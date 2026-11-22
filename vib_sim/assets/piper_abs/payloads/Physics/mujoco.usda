@@ -1,0 +1,268 @@
+#usda 1.0
+(
+    customLayerData = {
+        string creator = "URDF USD Converter v0.1.3"
+    }
+    defaultPrim = "piper"
+    doc = """Generated from Composed Stage of root layer /tmp/tmp5ypjhrao/piper.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_piper_abs_52y6qmro/usdex_piper_abs/piper.usdc
+
+
+Generated from Composed Stage of root layer /tmp/urdf_import_piper_abs_52y6qmro/temp_piper_abs/piper_abs.usd
+
+
+Generated from Composed Stage of root layer /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/assets/piper_abs/payloads/base.usd
+"""
+    kilogramsPerUnit = 1
+    metersPerUnit = 1
+    subLayers = [
+        @./physics.usda@
+    ]
+    upAxis = "Z"
+)
+
+over "piper"
+{
+    over "Physics"
+    {
+        def MjcActuator "joint1_actuator"
+        {
+            uniform double mjc:forceRange:max = 100
+            uniform double mjc:forceRange:min = -100
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint1>
+        }
+
+        def MjcActuator "joint2_actuator"
+        {
+            uniform double mjc:forceRange:max = 100
+            uniform double mjc:forceRange:min = -100
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint2>
+        }
+
+        def MjcActuator "joint3_actuator"
+        {
+            uniform double mjc:forceRange:max = 100
+            uniform double mjc:forceRange:min = -100
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint3>
+        }
+
+        def MjcActuator "joint4_actuator"
+        {
+            uniform double mjc:forceRange:max = 100
+            uniform double mjc:forceRange:min = -100
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint4>
+        }
+
+        def MjcActuator "joint5_actuator"
+        {
+            uniform double mjc:forceRange:max = 100
+            uniform double mjc:forceRange:min = -100
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint5>
+        }
+
+        def MjcActuator "joint6_actuator"
+        {
+            uniform double mjc:forceRange:max = 100
+            uniform double mjc:forceRange:min = -100
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint6>
+        }
+
+        def MjcActuator "joint7_actuator"
+        {
+            uniform double mjc:forceRange:max = 10
+            uniform double mjc:forceRange:min = -10
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint7>
+        }
+
+        def MjcActuator "joint8_actuator"
+        {
+            uniform double mjc:forceRange:max = 10
+            uniform double mjc:forceRange:min = -10
+            custom rel mjc:target
+            prepend rel mjc:target = </piper/Physics/joint8>
+        }
+
+        over "joint1" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "joint2" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "joint3" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "joint4" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "joint5" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "joint6" (
+            delete apiSchemas = ["PhysicsDriveAPI:angular", "PhysicsJointStateAPI:angular"]
+        )
+        {
+        }
+
+        over "joint6_to_gripper_base"
+        {
+        }
+
+        over "joint7" (
+            delete apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+        }
+
+        over "joint8" (
+            delete apiSchemas = ["PhysicsDriveAPI:linear", "PhysicsJointStateAPI:linear"]
+        )
+        {
+        }
+    }
+
+    over "Geometry"
+    {
+        over "base_link"
+        {
+            over "link1"
+            {
+                over "link2"
+                {
+                    over "link3"
+                    {
+                        over "link4"
+                        {
+                            over "link5"
+                            {
+                                over "link6"
+                                {
+                                    over "gripper_base"
+                                    {
+                                        over "link7"
+                                        {
+                                            over "link7"
+                                            {
+                                            }
+
+                                            over "link7_1"
+                                            {
+                                            }
+                                        }
+
+                                        over "link8"
+                                        {
+                                            over "link8"
+                                            {
+                                            }
+
+                                            over "link8_1"
+                                            {
+                                            }
+                                        }
+
+                                        over "gripper_base"
+                                        {
+                                        }
+
+                                        over "gripper_base_1"
+                                        {
+                                        }
+                                    }
+
+                                    over "link6"
+                                    {
+                                    }
+
+                                    over "link6_1"
+                                    {
+                                    }
+                                }
+
+                                over "link5"
+                                {
+                                }
+
+                                over "link5_1"
+                                {
+                                }
+                            }
+
+                            over "link4"
+                            {
+                            }
+
+                            over "link4_1"
+                            {
+                            }
+                        }
+
+                        over "link3"
+                        {
+                        }
+
+                        over "link3_1"
+                        {
+                        }
+                    }
+
+                    over "link2"
+                    {
+                    }
+
+                    over "link2_1"
+                    {
+                    }
+                }
+
+                over "link1"
+                {
+                }
+
+                over "link1_1"
+                {
+                }
+            }
+
+            over "base_link"
+            {
+            }
+
+            over "base_link_1"
+            {
+            }
+        }
+    }
+
+    over "Materials"
+    {
+    }
+
+    over "VisualMaterials"
+    {
+    }
+}
+
