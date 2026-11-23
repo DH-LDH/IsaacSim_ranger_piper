@@ -43,6 +43,7 @@ ap.add_argument("--blen", type=float, default=0.03, help="턱 길이[m]"); ap.ad
 ap.add_argument("--pose", default="A"); ap.add_argument("--dq-step", type=float, default=0.0, help="보정각 분해능[deg]"); ap.add_argument("--dq-dead", type=float, default=0.0, help="보정각 불감대[deg]")
 ap.add_argument("--lib-from", default="", help="지도 예견에 쓸 베이스 가속도 지도를 다른 실행(태그)에서 가져온다 — 다른 크기·속도의 턱에서 만든 지도를 쓰는 경우")
 ap.add_argument("--gui", action="store_true", help="Isaac Sim 창을 띄워 실시간으로 본다"); ap.add_argument("--loops", type=int, default=1, help="조건 목록을 몇 번 되풀이할지(0 = 창을 닫을 때까지)"); ap.add_argument("--slow", type=float, default=1.0)
+ap.add_argument("--rigid", action="store_true", help="팔을 강체로(관절 강성 100배) — 증폭이 없을 때의 전달률 기준")
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--replay", default="", help="팔을 유지하는 대신 실측 엔코더 기록(csv.gz)을 재생하면서 넘는다"); ap.add_argument("--replay-t0", type=float, default=8.0)
 ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
@@ -51,6 +52,8 @@ a = ap.parse_args()
 ZP = 0.04 if a.pothole > 0 else 0.0           # 패인 곳은 바닥을 뚫을 수 없어 4 cm 높이의 단 위를 달리게 하고 단에 홈을 낸다
 sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, tire_k=a.tire_k, tire_c=a.tire_c, mount_x=a.mount_x, z0=ZP, mount_yaw=a.yaw)
 POSE_A = POSE_A if a.pose.upper() == "A" else POSE_B     # 이 파일 안에서 쓰는 유지 자세
+if a.rigid:
+    sim.set_KD(sim.K * 100.0, sim.D * 100.0)
 os.makedirs(HERE + "/out", exist_ok=True)
 XB, LWB = 0.75, 0.494                        # 턱 위치[m], 축간 거리[m]
 def box(name, x0, x1, top, y0=-1.0, y1=1.0):
@@ -110,7 +113,7 @@ def run(case):
     for _ in range(2500):
         sim.step(P0_, np.zeros(6), wheel_w=np.zeros(4), steer=np.zeros(4))
     T = 0.3 + (XB + 0.3 + 0.5) / a.v + 2.0; n = int(T * sim.hz); t = np.arange(n) * DT
-    G = np.zeros((n, 3)); XBASE = np.zeros(n); DQ = np.zeros((n, 6)); A6 = np.zeros((n, 6))
+    G = np.zeros((n, 3)); XBASE = np.zeros(n); DQ = np.zeros((n, 6)); A6 = np.zeros((n, 6)); EV = np.zeros((n, 3)); BV = np.zeros((n, 6))
     v_prev = np.zeros(6); af = np.zeros(6); gf = np.zeros(3); al = 1 - math.exp(-2 * math.pi * a.lp * DT)
     abuf = [np.zeros(6)] * NB; gbuf = [np.zeros(3)] * NB
     t_f = None; rec = []; i_rear = None; x0 = None; tw0 = time.time()
@@ -175,7 +178,7 @@ def run(case):
         if a.gui and i % 20 == 0:
             sim.world.render(); lag_ = i * DT * a.slow - (time.time() - tw0)
             if lag_ > 0: time.sleep(lag_)
-        G[i] = g_now; DQ[i] = dq; A6[i] = af
+        G[i] = g_now; DQ[i] = dq; A6[i] = af; EV[i] = sim.ee_vel()[0]; BV[i] = v6
         p = np.asarray(sim.bb.get_world_poses()[0])[0]; XBASE[i] = p[0]
         if x0 is None: x0 = p[0]
     tf = t_f if t_f is not None else 0.0; tr = tf + LWB / a.v
@@ -198,10 +201,15 @@ def run(case):
         globals()["CORR"] = best
     mb = (t >= tf - 0.1) & (t < tr + 1.5)
     bb_ = [float(np.sqrt(np.mean(band(A6[mb, c], sim.hz, 2.0, 20.0) ** 2))) for c in (0, 2, 4)]
-    row = dict(case=case, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
+    # 전달률: 끝단 가속도 / 베이스 가속도 (세 축 벡터, 2–20 Hz). 속도를 대역 통과한 뒤 미분한다
+    def acc_rms(Vel):
+        return float(np.sqrt(sum(np.mean(np.gradient(band(Vel[mb, c], sim.hz, 2.0, 20.0), DT) ** 2) for c in range(3))))
+    ea_, ba_ = acc_rms(EV), acc_rms(BV[:, :3])
+    bg_ = float(np.sqrt(sum(np.mean(band(BV[mb, 3 + c], sim.hz, 2.0, 20.0) ** 2) for c in range(3))))
+    row = dict(case=case, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
                dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), t_front=tf, x_end=float(XBASE[-1] - x0))
     if a.keep:
-        np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, tf=tf, tr=tr)
+        np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, tf=tf, tr=tr)
     return row
 
 
