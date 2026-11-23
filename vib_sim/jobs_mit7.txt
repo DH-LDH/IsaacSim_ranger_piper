@@ -1,0 +1,9 @@
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_150540_ramp_j2_v10_d+10_r6_d1b5_v10_005_pd.csv.gz 0.3
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz 0.3
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz 0.3
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_150540_ramp_j2_v10_d+10_r6_d1b5_v10_005_pd.csv.gz 0.6
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz 0.6
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz 0.6
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_150540_ramp_j2_v10_d+10_r6_d1b5_v10_005_pd.csv.gz 1.0
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz 1.0
+/home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz 1.0
