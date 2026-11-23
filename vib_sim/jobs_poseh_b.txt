@@ -1,0 +1,6 @@
+th_base_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6
+th_h15_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6 --h 0.015
+th_pot_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6 --pothole 0.06
+th_base_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
+th_h15_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6 --h 0.015 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
+th_pot_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6 --pothole 0.06 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01

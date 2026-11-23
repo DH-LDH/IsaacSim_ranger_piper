@@ -32,7 +32,7 @@ import argparse, csv, math, os, sys, time
 if "--gui" in sys.argv:
     os.environ.setdefault("VIBSIM_GUI", "1")   # 화면으로 보기: vibsim을 들이기 전에 켠다
 import numpy as np
-from vibsim import HERE, POSE_A, POSE_B, WHEEL_R, PosServo, VibSim, app, band, shaper   # vibsim이 먼저 Isaac을 띄운다
+from vibsim import HERE, POSE_A, POSE_B, POSE_H, WHEEL_R, PosServo, VibSim, app, band, shaper   # vibsim이 먼저 Isaac을 띄운다
 from pxr import Gf, UsdGeom, UsdPhysics
 import mitarm
 from mitarm import MitArm
@@ -65,6 +65,8 @@ ap.add_argument("--Q", type=float, default=1.5, help="dampR 공진기의 Q(클�
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--replay", default="", help="팔을 유지하는 대신 실측 엔코더 기록(csv.gz)을 재생하면서 넘는다"); ap.add_argument("--replay-t0", type=float, default=8.0)
 ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
+ap.add_argument("--mag", type=float, default=0.0, help="끝단에 표식 둘을 띄운다: 초록 = 기준 궤적의 자리, 빨강 = 거기서 벗어난 양을 이 배율로 키운 자리 (영상에서 흔들림이 보이게, 0 = 끔)")
+ap.add_argument("--cam", default="", help="베이스를 따라가며 끝단을 가까이서 본다: side(옆) / rear(뒤). --gui·--rec 둘 다에 적용")
 ap.add_argument("--rec", default="", help="녹화: 조건마다 <이 값>_<조건>.mp4 와 끝단 흔들림 시계열(.npz)을 남긴다. 화면 없이 돌려도 된다(VIBSIM_USD=1 필요)")
 ap.add_argument("--rec-view", default="", help="카메라 \"ex,ey,ez,tx,ty,tz\" (비우면 경로 전체가 보이는 옆 시점)"); ap.add_argument("--rec-label", default="", help="영상 왼쪽 위에 적을 말(조건 이름 앞)")
 ap.add_argument("--ff-tau", action="store_true", help="MIT에서 미리 넣는 보정을 위치 기준뿐 아니라 토크에도 같이 넣는다: τ_ff += K·Δq / G (스프링이 전해야 할 토크를 PD가 아니라 τ_ff가 낸다)")
@@ -75,7 +77,7 @@ ap.add_argument("--tag", default="bump"); ap.add_argument("--keep", action="stor
 a = ap.parse_args()
 ZP = 0.04 if a.pothole > 0 else 0.0           # 패인 곳은 바닥을 뚫을 수 없어 4 cm 높이의 단 위를 달리게 하고 단에 홈을 낸다
 sim = VibSim(base="ranger", susp_k=a.susp_k, susp_c=a.susp_c, tire_k=a.tire_k, tire_c=a.tire_c, mount_x=a.mount_x, z0=ZP, mount_yaw=a.yaw)
-POSE_A = POSE_A if a.pose.upper() == "A" else POSE_B     # 이 파일 안에서 쓰는 유지 자세
+POSE_A = {"A": POSE_A, "B": POSE_B, "H": POSE_H}[a.pose.upper()]     # 이 파일 안에서 쓰는 유지 자세 (H = 그리퍼가 옆을 향함)
 if a.rigid:
     sim.set_KD(sim.K * 100.0, sim.D * 100.0)
 if a.k1_scale != 1.0:
@@ -102,7 +104,41 @@ if a.gui:
         set_camera_view(eye=[XB + 0.9, -1.7, 0.75 + ZP], target=[XB + 0.1, 0.0, 0.3 + ZP])
     except Exception as e:  # noqa: BLE001
         print("카메라·조명 설정 건너뜀:", e)
+MK = None
+if a.mag > 0:
+    MK = []
+    for _nm, _col in (("mk_ref", (0.1, 0.75, 0.2)), ("mk_mag", (0.9, 0.1, 0.1))):
+        _sp = UsdGeom.Sphere.Define(sim.stage, "/World/" + _nm); _sp.CreateRadiusAttr(0.014); _sp.CreateDisplayColorAttr([Gf.Vec3f(*_col)])
+        MK.append(UsdGeom.Xformable(_sp).AddTranslateOp())
+VIZ = {"p0": None, "xb0": 0.0, "off": np.zeros(3)}
+
+
+def _quat_rot(q):
+    w, x, y, z = q
+    return np.array([[1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)], [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)], [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)]])
+
+
+def viz_update(i, te_dev, xb):
+    """표식과 카메라를 지금 상태에 맞춘다. te_dev: 끝단이 기준 궤적에서 벗어난 양[m](월드). xb: 베이스가 간 거리[m]"""
+    pp_, oo_ = sim.ee.get_world_poses(); pt = np.asarray(pp_)[0].astype(float)
+    if VIZ["p0"] is None:
+        VIZ["p0"] = pt.copy(); VIZ["xb0"] = xb
+        VIZ["off"] = 0.20 * _quat_rot(np.asarray(oo_)[0].astype(float))[:, 2]       # 표식은 그리퍼 끝에서 조금 앞에 띄운다(몸체에 가리지 않게). 끝단 몸체의 +z가 그리퍼가 향하는 쪽
+    pt = pt + VIZ["off"]
+    if MK is not None:
+        ref = pt - te_dev; mg = ref + a.mag * te_dev
+        MK[0].Set(Gf.Vec3d(*ref.tolist())); MK[1].Set(Gf.Vec3d(*mg.tolist()))
+    if a.cam:
+        p0 = VIZ["p0"]; cx = p0[0] + (xb - VIZ["xb0"]); sy = 1.0 if p0[1] >= 0 else -1.0
+        if a.cam == "rear": eye, tgt = [cx - 3.0, p0[1] * 0.5, p0[2] + 0.05], [cx, p0[1] * 0.5, p0[2] - 0.10]      # 카메라 화각이 좁아(세로 15도쯤) 멀리서 본다
+        else: eye, tgt = [cx, p0[1] + sy * 3.0, p0[2] + 0.05], [cx, p0[1], p0[2] - 0.15]
+        return eye, tgt
+    return None, None
+
+
 RCAM = None
+if a.rec or a.cam:
+    from isaacsim.core.utils.viewports import set_camera_view
 if a.rec:
     import cv2
     from pxr import UsdLux
@@ -202,7 +238,7 @@ def run(case):
         elif RQ is not None: sim.step(RQ[k_], RV[k_], **W40)
         else: sim.step(POSE_A, Z6, **W40)
     dqff_last = np.zeros(6); vff = np.zeros(6); ERR = None; TAPK = np.zeros(3)
-    VW = None; HP = np.zeros(3); DEV = []
+    VW = None; HP = np.zeros(3); DEV = []; VIZ["p0"] = None
     if RCAM is not None:
         RCAM.initialize(); set_camera_view(eye=REC_EYE, target=REC_TGT, camera_prim_path="/World/reccam")
         for _ in range(12): sim.world.render()
@@ -318,11 +354,16 @@ def run(case):
             if i % 40 == 0:
                 DEV.append(float(np.linalg.norm(TE[i - 1] - HP)) * 1000.0 if i > 0 else 0.0)
                 xb_ = (XBASE[i - 1] if i > 0 else 0.0)
-                set_camera_view(eye=[REC_EYE[0] + xb_, REC_EYE[1], REC_EYE[2]], target=[REC_TGT[0] + xb_, REC_TGT[1], REC_TGT[2]], camera_prim_path="/World/reccam")
+                e_, t_ = viz_update(i, TE[i - 1] if i > 0 else np.zeros(3), xb_)
+                if e_ is None: e_, t_ = [REC_EYE[0] + xb_, REC_EYE[1], REC_EYE[2]], [REC_TGT[0] + xb_, REC_TGT[1], REC_TGT[2]]
+                set_camera_view(eye=e_, target=t_, camera_prim_path="/World/reccam")
                 sim.world.render(); im = RCAM.get_rgba()
                 if im is not None and getattr(im, "size", 0):
                     VW.write(cv2.cvtColor(np.ascontiguousarray(im[:, :, :3]), cv2.COLOR_RGB2BGR))
         if a.gui and i % 20 == 0:
+            if MK is not None or a.cam:
+                e_, t_ = viz_update(i, TE[i - 1] if i > 0 else np.zeros(3), XBASE[i - 1] if i > 0 else 0.0)
+                if e_ is not None: set_camera_view(eye=e_, target=t_)
             sim.world.render(); lag_ = i * DT * a.slow - (time.time() - tw0)
             if lag_ > 0: time.sleep(lag_)
         G[i] = g_now; A6[i] = af; EV[i] = sim.ee_vel()[0]; BV[i] = v6

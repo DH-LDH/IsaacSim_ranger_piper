@@ -1,0 +1,2 @@
+th_flat_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6 --stop --pothole 0.06 --h 0 --v 0.5
+th_flat_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pose H --fp 5.5 --fy 3.6 --bsf 3.6 --stop --pothole 0.06 --h 0 --v 0.5 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
