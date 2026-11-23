@@ -7,6 +7,8 @@
   bump       none | ff | phase | real | damponly | damponlyreal | ffb | rear | rearz | rearzfb | preview | previewpos | previewfb
   pothole    (bump와 같음)                            패인 바닥
   arm        pos | tde | asmc                         실측 팔 동작 기록 재생 + 베이스 앞뒤 이동 (--scn 1/2/3 으로 1·2·3축)
+  task       none | shape | damponlyreal | real | ff | preview | all | allrear
+             종합: AMR 출발 → 턱 → 정지하는 동안 팔이 실기 궤적(--scn 1/2/3, 기본 3축)을 따라 움직인다
 
 bump·pothole의 제어기
   ff         베이스 IMU 피드포워드(지연 10 ms)            phase      끝단 되먹임 + 위상 예측(지연 20 ms)
@@ -15,6 +17,11 @@ bump·pothole의 제어기
   rearzfb    rearz + 위상 예측 되먹임                      preview    지형을 미리 앎(지도 기반 예견)
   previewpos 예견을 위치 모드로                            previewfb  예견 + 실기 같은 되먹임
   damponly   감쇠만 더하기(공진기, 지연 20 ms)              damponlyreal 감쇠만 더하기, 실기 같은 지연
+task의 제어기
+  shape      AMR 속도 명령 성형(ZVD)만                    damponlyreal 성형 + 감쇠만 더하기(실기 같은 지연)
+  real       성형 + 위상 예측 되먹임(실기 같은 지연)         ff         성형 + 베이스 IMU 피드포워드(10 ms)
+  preview    성형 + 지형 예견                              all        성형 + 지형 예견 + 감쇠만 더하기
+  allrear    성형 + 뒷바퀴 예측(닮은 성분만) + 감쇠만 더하기   (task에 --pothole 0.06 을 붙이면 패인 바닥)
 bump·pothole은 "대책 없음 → 고른 제어기"를 번갈아 틀고, 그때마다 끝단 진동과 베이스 진동을 터미널에 찍는다.
 추가 옵션 예: --h 0.005(턱 높이·홈 깊이 m)  --v 0.15(속도)  --slow 2(느리게)  --mount-x 0(팔을 가운데로)
 """
@@ -23,13 +30,24 @@ import os, sys
 H = os.path.dirname(os.path.abspath(__file__))
 TOK = {"none": "none", "ff": "ff10", "phase": "damp20p", "real": "dampJ", "ffb": "ff10+damp10p", "rear": "prev", "rearz": "prevzE10+ff10",
        "rearzfb": "prevzE10+ff10+damp10p", "preview": "map", "previewpos": "mapservo", "previewfb": "map+dampJg", "damponly": "dampR20", "damponlyreal": "dampRJ"}
-if len(sys.argv) < 3 or sys.argv[1] not in ("start", "bump", "pothole", "arm"):
+TASK = {"none": "none", "shape": "bz", "damponlyreal": "bz+dampRJ", "real": "bz+dampJ", "ff": "bz+ff10", "preview": "bz+map", "all": "bz+map+dampRJ", "allrear": "bz+prevzE10+ff10+dampRJ"}
+SCN = {"1": "20261029_110051_slow_j2_s1", "2": "20261029_204150_slow_j12_sxy", "3": "20261029_204306_slow_j123_s3"}
+if len(sys.argv) < 3 or sys.argv[1] not in ("start", "bump", "pothole", "arm", "task"):
     print(__doc__); sys.exit(0)
 case, ctrl, extra = sys.argv[1], sys.argv[2], sys.argv[3:]
 if case == "start":
     cmd = [H + "/view.py", "--scene", "amr", "--case", ctrl]
 elif case == "arm":
     cmd = [H + "/view_replay.py", "--ctrl", ctrl, "--base", "move"] + (["--scn", "1"] if "--scn" not in extra else [])
+elif case == "task":
+    n_ = "3"
+    if "--scn" in extra:
+        k_ = extra.index("--scn"); n_ = extra[k_ + 1]; del extra[k_:k_ + 2]
+    tok = TASK.get(ctrl, ctrl)
+    cmd = [H + "/exp6_bump.py", "--gui", "--loops", "0", "--tag", "show", "--stop", "--cases", "none" if tok == "none" else "none," + tok,
+           "--replay", os.path.expanduser("~/piper_ws/docs/data/raw/scn/") + SCN[n_] + ".csv.gz"]
+    if "--h" not in extra: cmd += ["--h", "0.01"]
+    if "--v" not in extra: cmd += ["--v", "0.3"]
 else:
     tok = TOK.get(ctrl, ctrl)
     cmd = [H + "/exp6_bump.py", "--gui", "--loops", "0", "--tag", "show", "--cases", "none" if tok == "none" else "none," + tok]

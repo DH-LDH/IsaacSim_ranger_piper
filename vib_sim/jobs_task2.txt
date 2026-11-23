@@ -1,0 +1,9 @@
+tk2_s1_pos --stop --replay-t0 8.0 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+tk2_s2_pos --stop --replay-t0 8.0 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204150_slow_j12_sxy.csv.gz
+tk2_s3_pos --stop --replay-t0 8.0 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk2_s1_tde --stop --replay-t0 14.9 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110813_sine.csv.gz
+tk2_s1_asmc --stop --replay-t0 9.0 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_111226_sine.csv.gz
+tk2_s2_tde --stop --replay-t0 17.85 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_203040_sine.csv.gz
+tk2_s2_asmc --stop --replay-t0 9.0 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_112534_sine.csv.gz
+tk2_s3_tde --stop --replay-t0 13.3 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_205503_sine.csv.gz
+tk2_s3_asmc --stop --tail 0.9 --replay-t0 23.4 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_205725_sine.csv.gz

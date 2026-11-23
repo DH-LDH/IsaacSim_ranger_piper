@@ -1,3 +1,4 @@
 *.npz
 *.log
 __pycache__/
+out/exp6_show.csv

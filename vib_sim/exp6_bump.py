@@ -28,7 +28,7 @@ import argparse, csv, math, os, sys, time
 if "--gui" in sys.argv:
     os.environ.setdefault("VIBSIM_GUI", "1")   # 화면으로 보기: vibsim을 들이기 전에 켠다
 import numpy as np
-from vibsim import HERE, POSE_A, POSE_B, WHEEL_R, PosServo, VibSim, app, band   # vibsim이 먼저 Isaac을 띄운다
+from vibsim import HERE, POSE_A, POSE_B, WHEEL_R, PosServo, VibSim, app, band, shaper   # vibsim이 먼저 Isaac을 띄운다
 from pxr import Gf, UsdGeom, UsdPhysics
 
 ap = argparse.ArgumentParser()
@@ -45,6 +45,10 @@ ap.add_argument("--blen", type=float, default=0.03, help="턱 길이[m]"); ap.ad
 ap.add_argument("--pose", default="A"); ap.add_argument("--dq-step", type=float, default=0.0, help="보정각 분해능[deg]"); ap.add_argument("--dq-dead", type=float, default=0.0, help="보정각 불감대[deg]")
 ap.add_argument("--lib-from", default="", help="지도 예견에 쓸 베이스 가속도 지도를 다른 실행(태그)에서 가져온다 — 다른 크기·속도의 턱에서 만든 지도를 쓰는 경우")
 ap.add_argument("--gui", action="store_true", help="Isaac Sim 창을 띄워 실시간으로 본다"); ap.add_argument("--loops", type=int, default=1, help="조건 목록을 몇 번 되풀이할지(0 = 창을 닫을 때까지)"); ap.add_argument("--slow", type=float, default=1.0)
+ap.add_argument("--stop", action="store_true", help="종합 시나리오: 출발 → 턱 → 0.9 m 더 가서 정지(1 m/s^2). 지표는 전체 구간")
+ap.add_argument("--tail", type=float, default=2.0, help="종합 시나리오에서 정지한 뒤 더 재는 시간[s]")
+ap.add_argument("--still", action="store_true", help="AMR을 세워 둔다(팔만 움직이는 기준)")
+ap.add_argument("--bshape", default="none", help="AMR 속도 명령 성형을 모든 조건에: none / zvd (조건 토큰 bz로 조건마다 켤 수도 있다)"); ap.add_argument("--bsf", type=float, default=4.125)
 ap.add_argument("--rigid", action="store_true", help="팔을 강체로(관절 강성 100배) — 증폭이 없을 때의 전달률 기준")
 ap.add_argument("--Q", type=float, default=1.5, help="dampR 공진기의 Q(클수록 좁은 대역)")
 ap.add_argument("--seed", type=int, default=1)
@@ -86,13 +90,17 @@ M = sim.mass_matrix(); off = M.shape[0] - sim.n
 FF = M[off + sim.ia][:, :6] / sim.K[:, None]  # 베이스 가속도(병진 xyz, 회전 xyz) → 모터 쪽 보정각
 FLIP = np.array([1, 1, 1, 1, -1, 1.0])        # 뒷바퀴가 넘을 때: 차체 끄덕임(wy)만 부호 반대
 DT = sim.dt; NB = 200; LIB = None; CORR = float("nan")
-RQ = RV = None
+RQ = RV = RQREF = None; JMP = []
+EEB = list(sim.art.body_names).index("gripper_base")      # 끝단 위치 오차용 야코비안의 몸체 번호
 if a.replay:
     import csv as _csv, gzip as _gz
     with _gz.open(a.replay, "rt") as _f: _r = list(_csv.DictReader(_f))
     _t = np.array([float(x["t"]) for x in _r]); _t = _t - _t[0]; _q = np.radians(np.array([[float(x[f"q{j}"]) for j in range(1, 7)] for x in _r]))
     _tt = np.arange(a.replay_t0, _t[-1], DT); RQ = np.stack([np.interp(_tt, _t, _q[:, j]) for j in range(6)], axis=1)
     RV = np.gradient(RQ, DT, axis=0); _k = np.ones(25) / 25.0; RV = np.stack([np.convolve(RV[:, j], _k, "same") for j in range(6)], axis=1)
+    _jp = os.path.expanduser("~/piper_ws/docs/data/raw/mit_jumps.csv"); _st = os.path.basename(a.replay).replace(".csv.gz", "")
+    JMP = [(float(x["exclude_from"]) - a.replay_t0, float(x["exclude_to"]) - a.replay_t0) for x in _csv.DictReader(open(_jp)) if x["stem"] == _st] if os.path.exists(_jp) else []
+    _qr = np.radians(np.array([[float(x[f"qref{j}"]) for j in range(1, 7)] for x in _r])); RQREF = np.stack([np.interp(_tt, _t, _qr[:, j]) for j in range(6)], axis=1)
 
 
 def run(case):
@@ -119,14 +127,26 @@ def run(case):
     sim.world.reset(); sim._apply_gains(); sim.set_state(P0_); sv = PosServo(POSE_A, DT)
     for _ in range(2500):
         sim.step(P0_, np.zeros(6), wheel_w=np.zeros(4), steer=np.zeros(4))
-    T = 0.3 + (XB + 0.3 + 0.5) / a.v + 2.0; n = int(T * sim.hz); t = np.arange(n) * DT
+    Ta_ = a.v / 1.0; Tc_ = (XB + 0.9 - a.v * Ta_) / a.v; bz_ = a.bshape == "zvd" or "bz" in tok; BI = shaper("zvd", a.bsf, 0.10) if bz_ else [(1.0, 0.0)]
+
+    def vprof(tt):
+        u = tt - 0.1
+        if a.still: return 0.0
+        if not a.stop: return min(a.v, 1.0 * max(0.0, u))
+        if u < 0: return 0.0
+        if u < Ta_: return u
+        if u < Ta_ + Tc_: return a.v
+        if u < 2 * Ta_ + Tc_: return a.v - (u - Ta_ - Tc_)
+        return 0.0
+    T = (0.1 + 2 * Ta_ + Tc_ + 0.3 + a.tail) if a.stop else (0.3 + (XB + 0.3 + 0.5) / a.v + 2.0)
+    n = int(T * sim.hz); t = np.arange(n) * DT; TE = np.zeros((n, 3)); te_ = np.zeros(3); OFF_ = None
     G = np.zeros((n, 3)); XBASE = np.zeros(n); DQ = np.zeros((n, 6)); A6 = np.zeros((n, 6)); EV = np.zeros((n, 3)); BV = np.zeros((n, 6))
     v_prev = np.zeros(6); af = np.zeros(6); gf = np.zeros(3); al = 1 - math.exp(-2 * math.pi * a.lp * DT)
     abuf = [np.zeros(6)] * NB; gbuf = [np.zeros(3)] * NB
     t_f = None; rec = []; i_rear = None; x0 = None; tw0 = time.time()
     lp_lag = 1.0 / (2 * math.pi * a.lp)       # 저역 통과가 더하는 지연(대략)
     for i in range(n):
-        vc = min(a.v, 1.0 * max(0.0, t[i] - 0.1))
+        vc = sum(ai * vprof(t[i] - ti) for ai, ti in BI)
         lv, av = sim.base_vel(); v6 = np.r_[lv, av]
         a6 = (v6 - v_prev) / DT if i > 0 else np.zeros(6); v_prev = v6
         af = af + al * (a6 - af); abuf.append(af.copy()); abuf.pop(0)
@@ -202,9 +222,15 @@ def run(case):
             sim.world.render(); lag_ = i * DT * a.slow - (time.time() - tw0)
             if lag_ > 0: time.sleep(lag_)
         G[i] = g_now; DQ[i] = dq; A6[i] = af; EV[i] = sim.ee_vel()[0]; BV[i] = v6
+        if i % 5 == 0:                                                 # 끝단 위치가 기준 궤적에서 벗어난 양: J_v (q_링크 - q_기준)
+            Jv = np.asarray(sim.art.get_jacobians())[0, EEB, :3, :]; Jv = Jv[:, Jv.shape[1] - sim.n + sim.ia]
+            qd_ = RQREF[min(i, len(RQREF) - 1)] if RQREF is not None else POSE_A
+            te_ = Jv @ (sim.q_link() - qd_)
+            if OFF_ is None: OFF_ = te_.copy()                         # 시작할 때의 정적 처짐은 뺀다
+        TE[i] = te_ - (OFF_ if OFF_ is not None else 0.0)
         p = np.asarray(sim.bb.get_world_poses()[0])[0]; XBASE[i] = p[0]
         if x0 is None: x0 = p[0]
-    tf = t_f if t_f is not None else 0.0; tr = tf + LWB / a.v
+    tf = t_f if t_f is not None else (XB - LWB / 2) / a.v; tr = tf + LWB / a.v
 
     def rms(t0, t1):
         m = (t >= t0) & (t < t1)
@@ -217,6 +243,10 @@ def run(case):
             L_ = np.load(HERE + f"/out/exp6_lib_{a.lib_from}.npz"); globals()["LIB"] = (L_["x"], L_["a6"] * a.lib_scale)
         else:
             globals()["LIB"] = (XBASE - x0, A6.copy())
+        if a.stop:
+            lx, la = LIB; x1_, x2_ = XB - LWB / 2 - 0.10, XB + LWB / 2 + 0.35
+            wgt = np.clip((lx - x1_) / 0.03, 0, 1) * np.clip((x2_ - lx) / 0.03, 0, 1); kp = np.r_[True, np.diff(np.maximum.accumulate(lx)) > 0]
+            globals()["LIB"] = (lx[kp], (la * wgt[:, None])[kp])
         i0 = np.searchsorted(t, tf - 0.03); j0 = np.searchsorted(t, tr - 0.03); best = 0.0
         for lag in range(-150, 151, 2):
             f_, r_ = A6[i0:i0 + 600, 2], A6[j0 + lag:j0 + lag + 600, 2]
@@ -232,10 +262,16 @@ def run(case):
         return float(np.sqrt(sum(np.mean(np.gradient(band(EV[mb, c], sim.hz, lo, hi), DT) ** 2) for c in range(3))))
     ea_lo, ea_hi = acc_band(2.0, 10.0), acc_band(10.0, 20.0)
     bg_ = float(np.sqrt(sum(np.mean(band(BV[mb, 3 + c], sim.hz, 2.0, 20.0) ** 2) for c in range(3))))
-    row = dict(case=case, ee_acc_lo=ea_lo, ee_acc_hi=ea_hi, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
+    mf = (t >= 0.1) & (t < T - 0.05)                                    # 전체 구간 지표(종합 시나리오). MIT 기록의 순간 튐 구간은 뺀다
+    for j0_, j1_ in JMP: mf &= ~((t >= j0_) & (t < j1_))
+    fax_ = [float(np.sqrt(np.mean(band(G[:, c], sim.hz, 2.0, 20.0)[mf] ** 2))) for c in range(3)]; fg_ = float(np.sqrt(sum(x_ ** 2 for x_ in fax_)))
+    fa_ = [float(np.sqrt(sum(np.mean(np.gradient(band(EV[:, c], sim.hz, lo_, hi_), DT)[mf] ** 2) for c in range(3)))) for lo_, hi_ in ((2.0, 10.0), (10.0, 20.0))]
+    tv_ = float(np.sqrt(sum(np.mean(band(TE[:, c], sim.hz, 2.0, 20.0)[mf] ** 2) for c in range(3)))) * 1000.0
+    terr_ = float(np.sqrt(np.mean(np.sum(TE[mf] ** 2, axis=1)))) * 1000.0; tpk_ = float(np.max(np.linalg.norm(TE[mf], axis=1))) * 1000.0
+    row = dict(case=case, bz=int(bz_), still=int(a.still), replay=os.path.basename(a.replay)[:40] if a.replay else "", full_vec=fg_, full_roll=fax_[0], full_pitch=fax_[1], full_yaw=fax_[2], kept_s=float(np.sum(mf) * DT), t0=a.replay_t0, full_acc_lo=fa_[0], full_acc_hi=fa_[1], tip_vib_mm=tv_, tip_err_mm=terr_, tip_peak_mm=tpk_, bshape=a.bshape, ee_acc_lo=ea_lo, ee_acc_hi=ea_hi, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
                dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), t_front=tf, x_end=float(XBASE[-1] - x0))
     if a.keep:
-        np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, tf=tf, tr=tr)
+        np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, te=TE, tf=tf, tr=tr)
     return row
 
 
@@ -245,6 +281,8 @@ while True:
     for case in a.cases.split(","):
         rows.append(run(case)); r_ = rows[-1]; b_ = rows[0]
         if a.gui:
+            if a.stop:
+                print(f"[{lp_ + 1}] {case:20s} 전체 구간: 끝단 각속도 {r_['full_vec']:.4f} rad/s, 가속도 {r_['full_acc_lo']:.2f} / {r_['full_acc_hi']:.2f} m/s² (2–10 / 10–20 Hz), 궤적 주위 흔들림 {r_['tip_vib_mm']:.2f} mm, 궤적 오차 {r_['tip_err_mm']:.2f} mm(최대 {r_['tip_peak_mm']:.2f})", flush=True)
             print(f"[{lp_ + 1}] {case:24s} 끝단 진동 {r_['vec']:.4f} rad/s (대책 없음의 {r_['vec'] / b_['vec']:.2f}배; 앞바퀴 구간 {r_['front'] / b_['front']:.2f}, 뒷바퀴 구간 {r_['rear'] / b_['rear']:.2f})"
                   f" | 베이스 상하 가속도 {r_['base_az_rms']:.2f} m/s², 앞뒤 {r_['base_ax_rms']:.2f} m/s²", flush=True)
         else:

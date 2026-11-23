@@ -1,0 +1,6 @@
+tk2_s3_h5 --stop --h 0.005 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk2_s3_pot --stop --pothole 0.06 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk2_s3_v50 --stop --v 0.5 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk2_s3_v15 --stop --v 0.15 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk2r_s3_v50 --stop --still --v 0.5 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk2r_hold --stop
