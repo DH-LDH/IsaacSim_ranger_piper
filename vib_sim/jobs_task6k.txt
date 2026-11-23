@@ -1,0 +1,10 @@
+fl5k_f26_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 0.39
+fl5k_f26_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 0.39 --mit tde --mit-tdc 2 --qd-noise 0.01
+fl5k_f30_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 0.52
+fl5k_f30_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 0.52 --mit tde --mit-tdc 2 --qd-noise 0.01
+fl5k_f35_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 0.71
+fl5k_f35_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 0.71 --mit tde --mit-tdc 2 --qd-noise 0.01
+fl5k_f48_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 1.34
+fl5k_f48_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 1.34 --mit tde --mit-tdc 2 --qd-noise 0.01
+fl5k_f55_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 1.76
+fl5k_f55_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pothole 0.06 --h 0 --v 0.5 --pre 1.0 --k1-scale 1.76 --mit tde --mit-tdc 2 --qd-noise 0.01

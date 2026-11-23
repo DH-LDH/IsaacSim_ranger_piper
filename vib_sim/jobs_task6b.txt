@@ -1,9 +1,9 @@
-tq5_base_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0  
-tq5_h5_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.005 
-tq5_h15_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.015 
-tq5_v15_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --v 0.15 
-tq5_v50_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --v 0.5 
-tq5_pot_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pothole 0.06 
+tq5_base_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0
+tq5_h5_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.005
+tq5_h15_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.015
+tq5_v15_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --v 0.15
+tq5_v50_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --v 0.5
+tq5_pot_pos --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pothole 0.06
 tq5_base_pd --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0  --mit pd
 tq5_h5_pd --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.005 --mit pd
 tq5_h15_pd --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.015 --mit pd

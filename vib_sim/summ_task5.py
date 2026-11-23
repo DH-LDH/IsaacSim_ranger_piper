@@ -26,14 +26,14 @@ for s, nm in ((1, "한 관절(J2)"), (2, "두 관절(J1·J2)"), (3, "세 관절(
 md += ["## 평지 출발·정지 (팔은 자세 유지)", "", "| 속도 | 구동 방식 | " + " | ".join(x for x in ("대책 없음 [rad/s]", "속도 성형", "끝단 되먹임", "성형 + 되먹임", "베이스 IMU 보정", "성형 + IMU 보정")) + " | 대책 없음: 위치 제어 대비 | J1이 미끄러진 시간 비율 |", "|---|---|---|---|---|---|---|---|---|---|"]
 for v in (30, 50):
     bp = load(f"fl5_v{v}_pos")
-    for m, mn in MODE[:4]:
+    for m, mn in MODE:
         R = load(f"fl5_v{v}_{m}")
         if not R: continue
         b = R["none"]; g = lambda c: f"{float(R[c]['full_vec']) / float(b['full_vec']):.2f}" if c in R else "—"
-        md.append(f"| 0.{v // 10} m/s | {mn} | {float(b['full_vec']):.4f} | {g('bz')} | {g('dampRJ')} | {g('bz+dampRJ')} | {g('ff10')} | {g('bz+ff10')} | {float(b['full_vec']) / float(bp['none']['full_vec']):.2f} | {b.get('slip_j1', '') if m != 'pos' else '—'} |")
+        md.append(f"| 0.{v // 10} m/s | {mn} | {float(b['full_vec']):.4f} | {g('bz')} | {g('dampRJ')} | {g('bz+dampRJ')} | {g('ff10')} | {g('bz+ff10')} | {float(b['full_vec']) / float(bp['none']['full_vec']):.2f} | " + (f"{float(b['slip_j1']):.2f}" if m != "pos" else "—") + " |")
 md += ["", "## 턱·패인 바닥 여섯 조건 (팔은 자세 유지) — 대책 없음 대비 끝단 각속도 비, 가운데 값(범위)", "", "| 구동 방식 | 대책 없음: 위치 제어 대비 | 끝단 되먹임 | 베이스 IMU 보정 | 뒷바퀴 예측 + 되먹임 | 지형 예견 + 되먹임 | J1·J2·J3이 미끄러진 시간 비율(가운데) |", "|---|---|---|---|---|---|---|"]
 CN = ("base", "h5", "h15", "v15", "v50", "pot")
-for m, mn in MODE[:4]:
+for m, mn in MODE:
     Rs = [(load(f"tq5_{c}_{m}"), load(f"tq5_{c}_pos")) for c in CN]; Rs = [(a_, b_) for a_, b_ in Rs if a_ and b_]
     if not Rs: continue
     def col(c):

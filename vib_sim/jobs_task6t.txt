@@ -1,0 +1,9 @@
+tk5t_s1_tde3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit tde --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+tk5t_s1_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit tde --mit-tdc 2 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+tk5t_s1_pd --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit pd --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+tk5t_s2_tde3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit tde --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204150_slow_j12_sxy.csv.gz
+tk5t_s2_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit tde --mit-tdc 2 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204150_slow_j12_sxy.csv.gz
+tk5t_s2_pd --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit pd --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204150_slow_j12_sxy.csv.gz
+tk5t_s3_tde3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit tde --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk5t_s3_tde --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit tde --mit-tdc 2 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk5t_s3_pd --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --stop --pre 1.5 --ff-tau --mit pd --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz

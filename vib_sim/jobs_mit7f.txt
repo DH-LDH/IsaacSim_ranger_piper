@@ -1,0 +1,3 @@
+m6s pd_144251 --file /home/da/piper_ws/docs/data/raw/s1123/20261123_144251_sine_s3_pd.csv.gz --ctrl pd --win 4.12,22.0
+m6s pd_144442 --file /home/da/piper_ws/docs/data/raw/s1123/20261123_144442_sine_s3_pd.csv.gz --ctrl pd --win 4.12,22.0
+m6s pd_144619 --file /home/da/piper_ws/docs/data/raw/s1123/20261123_144619_sine_s3_pd.csv.gz --ctrl pd --win 4.12,22.0

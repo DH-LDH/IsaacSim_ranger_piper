@@ -1,6 +1,6 @@
 """KRoC 양식용 그림(1단 폭 80 mm, 300 dpi 이상·1000 픽셀 이상, 글자 9 pt 안팎, 캡션은 영어).
 실행: ~/nonmoon/.venv_pptx/bin/python fig_kroc.py  →  figs/kroc_fig1.png, figs/kroc_fig2.png
-입력: out/exp3_replay_c1.csv, out/exp6_ts_figtask_*.npz, out/exp6_tk4_s{1,2,3}.csv, out/exp6_tk2r_s{1,2,3}_pos.csv"""
+입력: out/exp3_replay_c1.csv, out/exp6_tk5_s{1,2,3}_{pos,pd,asmc3}.csv, out/exp6_tk5r_s{1,2,3}_asmc3.csv"""
 import csv, os
 import numpy as np
 import matplotlib
@@ -24,24 +24,22 @@ lim = 0.12; ax.plot([0, lim], [0, lim], "k--", lw=0.6); ax.set_xlim(0, lim); ax.
 ax.set_xlabel("Measured residual vibration [rad/s]"); ax.set_ylabel("Model [rad/s]"); ax.legend(frameon=False, fontsize=7.5, loc="lower right")
 fig.savefig(H + "/figs/kroc_fig1.png"); plt.close(fig)
 
-# ---- Fig. 2: 종합 장면(팔 동작 + 베이스 출발 → 턱 → 정지) ----
-CS = [("none", "No control", "#555555"), ("bz+prevzE10+ff10+dampRJ", "Shaping + rear-wheel pred. + FB", "#1f77b4"), ("bz+map+dampRJ", "Shaping + terrain preview + FB", "#d62728")]
-fig, ax = plt.subplots(2, 1, figsize=(3.15, 3.5), gridspec_kw={"height_ratios": [1, 1], "hspace": 0.62})
-for case, lab, c in CS:
-    d = np.load(O + f"/exp6_ts_figtask_{case}.npz"); t = d["t"]
-    dev = np.sqrt(sum(band(d["te"][:, k], 1000.0, 2, 20) ** 2 for k in range(3))) * 1000.0
-    ax[0].plot(t, dev, color=c, lw=0.6)
-tf, tr = float(d["tf"]), float(d["tr"])
-for x_, s_ in ((tf, "front wheel"), (tr, "rear")):
-    ax[0].axvline(x_, color="k", lw=0.5, ls=":"); ax[0].text(x_, 1.02, s_, fontsize=7, ha="center", transform=ax[0].get_xaxis_transform())
-ax[0].set_xlim(0.3, t[-1] - 0.3); ax[0].set_xlabel("Time [s]"); ax[0].set_ylabel("Tip deviation [mm]"); ax[0].text(0.01, 0.9, "(a)", transform=ax[0].transAxes, fontsize=8.5)
-w = 0.2
+# ---- Fig. 2 (v4, MIT 기준): 종합 장면(팔 동작 + 베이스 출발 → 턱 → 정지) — (a) 궤적 오차, (b) 흔들림 ----
+# 앞선 판(위치 모드 기록 재생, 시간 파형 + 막대)은 figs/kroc_fig2_v3.png로 남겼다.
+def L(tag): return {r["case"]: r for r in csv.DictReader(open(O + f"/exp6_{tag}.csv"))}
+LAY = "bz+prevzE10+ff10+dampRJ"; w = 0.2
+fig, ax = plt.subplots(2, 1, figsize=(3.15, 3.25), gridspec_kw={"hspace": 1.12})
+A = [("pos", "none", "Position control", "#999999"), ("pd", "none", "Torque mode, built-in PD only", "#f0b27a"), ("asmc3", "none", "Torque mode + tracking control", "#5b9bd5"), ("asmc3", LAY, "  + shaping + rear-wheel pred. + FB", "#1f4e79")]
 for i, n in enumerate("123"):
-    R = {r["case"]: r for r in csv.DictReader(open(O + f"/exp6_tk4_s{n}.csv"))}; ref = next(csv.DictReader(open(O + f"/exp6_tk2r_s{n}_pos.csv")))
-    vals = [(float(ref["tip_vib_mm"]), "#bbbbbb", "Arm motion only (base at rest)")] + [(float(R[c_]["tip_vib_mm"]), col, lab) for c_, lab, col in CS]
-    for k, (v, col, lab) in enumerate(vals):
-        ax[1].bar(i + (k - 1.5) * w, v, w, color=col, label=lab if i == 0 else None, zorder=3)
-ax[1].set_xticks(range(3)); ax[1].set_xticklabels(["1 joint", "2 joints", "3 joints"]); ax[1].set_ylabel("Deviation rms [mm]"); ax[1].grid(axis="x", visible=False)
-ax[1].text(0.01, 0.9, "(b)", transform=ax[1].transAxes, fontsize=8.5)
-hh, ll = ax[1].get_legend_handles_labels(); fig.legend(hh, ll, loc="lower center", ncol=1, fontsize=7.2, frameon=False, bbox_to_anchor=(0.5, -0.17))
+    for k, (m, c, lab, col) in enumerate(A):
+        ax[0].bar(i + (k - 1.5) * w, float(L(f"tk5_s{n}_{m}")[c]["tip_err_mm"]), w, color=col, label=lab if i == 0 else None, zorder=3)
+ax[0].set_ylabel("Path error rms [mm]"); ax[0].text(0.01, 0.88, "(a)", transform=ax[0].transAxes, fontsize=8.5)
+B = [("r", "none", "Arm motion only (base at rest)", "#bbbbbb"), ("", "none", "Base moving, no base-side control", "#555555"), ("", LAY, "Shaping + rear-wheel pred. + FB", "#1f4e79")]
+for i, n in enumerate("123"):
+    for k, (r_, c, lab, col) in enumerate(B):
+        ax[1].bar(i + (k - 1) * w * 1.2, float(L(f"tk5{r_}_s{n}_asmc3")[c]["tip_vib_mm"]), w * 1.2, color=col, label=lab if i == 0 else None, zorder=3)
+ax[1].set_ylabel("Deviation 2-20 Hz [mm]"); ax[1].text(0.01, 0.88, "(b)", transform=ax[1].transAxes, fontsize=8.5)
+for a_ in ax:
+    a_.set_xticks(range(3)); a_.set_xticklabels(["1 joint", "2 joints", "3 joints"]); a_.grid(axis="x", visible=False)
+    a_.legend(loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=1, fontsize=6.8, frameon=False, handlelength=1.2, labelspacing=0.2)
 fig.savefig(H + "/figs/kroc_fig2.png"); plt.close(fig); print("ok")

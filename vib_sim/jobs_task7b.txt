@@ -1,0 +1,6 @@
+tq5_base_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
+tq5_h5_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.005 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
+tq5_h15_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --h 0.015 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
+tq5_v15_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --v 0.15 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
+tq5_v50_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --v 0.5 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
+tq5_pot_asmc3 --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --pre 1.0 --pothole 0.06 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01
