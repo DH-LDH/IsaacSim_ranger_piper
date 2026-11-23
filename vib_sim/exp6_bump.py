@@ -21,6 +21,10 @@ AMR이 등속으로 가다가 바닥의 턱(높이 --h, 길이 3 cm, 앞바퀴 �
   dampRN    감쇠만 더하기: 끝단 각속도를 모드 주파수의 공진기(대역 통과, --Q)에 넣고 그 상태로 위상을 당김(지연 N ms). 모드보다 빠른 성분을 건드리지 않는다.
             dampRJ = 실기처럼 100 Hz·들쭉날쭉한 지연
   dampNp    같은 되먹임에 위상 예측: 울림이 한 주파수(끄덕임 7.5 Hz, 좌우 4.1 Hz)라고 보고 N ms 뒤의 값을 계산해 쓴다
+--mit pd|tde|asmc16: 관절 1–3의 모터 쪽을 엔코더 재생·유지 대신 MIT 모드 모형(mitarm.py: 펌웨어 PD + τ_ff + 마찰, 추종층은 실기 joint_ctrl)으로 굴린다.
+            기준은 --replay 기록의 qref(없으면 자세 유지), 관절 4–6은 그대로 재생. 이때 미리 넣는 보정(ff·prev·map)은 위치 기준에 더해 보내고,
+            끝단 되먹임(damp)은 링크에 바로 닿는 토크로 넣는다(스프링 목표를 τ/K만큼 옮김 — 실기 처프에서 엔코더는 안 움직이는데 끝단이 응답한 것에 맞춘 꼴).
+            --pre 초만큼은 AMR을 세워 두고 기준을 따라가며 자리를 잡는다(지표에서 뺌).
 출력: out/exp5_<tag>.csv — 끝단 자이로 세 축 2–20 Hz rms: 전체 / 앞바퀴 구간 / 뒷바퀴 구간.
 타이어 탄성은 접촉 강성(--tire-k, 기본 150 kN/m)으로 넣는다. 실물 타이어 값은 모른다 — 절댓값이 아니라 조건끼리의 비로 본다.
 """
@@ -30,6 +34,8 @@ if "--gui" in sys.argv:
 import numpy as np
 from vibsim import HERE, POSE_A, POSE_B, WHEEL_R, PosServo, VibSim, app, band, shaper   # vibsim이 먼저 Isaac을 띄운다
 from pxr import Gf, UsdGeom, UsdPhysics
+import mitarm
+from mitarm import MitArm
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--v", type=float, default=0.3); ap.add_argument("--h", type=float, default=0.01)
@@ -59,6 +65,8 @@ ap.add_argument("--Q", type=float, default=1.5, help="dampR 공진기의 Q(클�
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--replay", default="", help="팔을 유지하는 대신 실측 엔코더 기록(csv.gz)을 재생하면서 넘는다"); ap.add_argument("--replay-t0", type=float, default=8.0)
 ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
+ap.add_argument("--mit", default="", help="관절 1–3을 MIT 모드 모형으로: pd / tde / asmc16 (비우면 엔코더 재생·유지)"); ap.add_argument("--mit-tdc", default="2", help="추종층을 거는 관절")
+ap.add_argument("--pre", type=float, default=0.0, help="재기 전에 AMR을 세워 둔 채 기준을 따라가는 시간[s] (--replay면 기록의 그만큼 앞에서 시작)"); mitarm.add_args(ap)
 ap.add_argument("--tag", default="bump"); ap.add_argument("--keep", action="store_true")
 a = ap.parse_args()
 ZP = 0.04 if a.pothole > 0 else 0.0           # 패인 곳은 바닥을 뚫을 수 없어 4 cm 높이의 단 위를 달리게 하고 단에 홈을 낸다
@@ -95,7 +103,7 @@ M = sim.mass_matrix(); off = M.shape[0] - sim.n
 FF = M[off + sim.ia][:, :6] / sim.K[:, None]  # 베이스 가속도(병진 xyz, 회전 xyz) → 모터 쪽 보정각
 FLIP = np.array([1, 1, 1, 1, -1, 1.0])        # 뒷바퀴가 넘을 때: 차체 끄덕임(wy)만 부호 반대
 DT = sim.dt; NB = 200; LIB = None; CORR = float("nan")
-RQ = RV = RQREF = None; JMP = []
+RQ = RV = RQREF = RVREF = RAREF = None; JMP = []; NPRE = int(round(a.pre * sim.hz))
 FBMAP = ((1, abs(a.fbp) - 1, a.fp, 1.0 if a.fbp > 0 else -1.0), (2, 0, a.fy, 1.0))
 KICKS = [(int(k_.split(",")[0]) - 1, math.radians(float(k_.split(",")[1])), float(k_.split(",")[2])) for k_ in a.kick.split(";") if k_]
 SAT = [0, 0]
@@ -129,11 +137,12 @@ if a.replay:
     import csv as _csv, gzip as _gz
     with _gz.open(a.replay, "rt") as _f: _r = list(_csv.DictReader(_f))
     _t = np.array([float(x["t"]) for x in _r]); _t = _t - _t[0]; _q = np.radians(np.array([[float(x[f"q{j}"]) for j in range(1, 7)] for x in _r]))
-    _tt = np.arange(a.replay_t0, _t[-1], DT); RQ = np.stack([np.interp(_tt, _t, _q[:, j]) for j in range(6)], axis=1)
+    _tt = np.arange(a.replay_t0 - a.pre, _t[-1], DT); RQ = np.stack([np.interp(_tt, _t, _q[:, j]) for j in range(6)], axis=1)
     RV = np.gradient(RQ, DT, axis=0); _k = np.ones(25) / 25.0; RV = np.stack([np.convolve(RV[:, j], _k, "same") for j in range(6)], axis=1)
     _jp = os.path.expanduser("~/piper_ws/docs/data/raw/mit_jumps.csv"); _st = os.path.basename(a.replay).replace(".csv.gz", "")
     JMP = [(float(x["exclude_from"]) - a.replay_t0, float(x["exclude_to"]) - a.replay_t0) for x in _csv.DictReader(open(_jp)) if x["stem"] == _st] if os.path.exists(_jp) else []
     _qr = np.radians(np.array([[float(x[f"qref{j}"]) for j in range(1, 7)] for x in _r])); RQREF = np.stack([np.interp(_tt, _t, _qr[:, j]) for j in range(6)], axis=1)
+    _k2 = np.ones(41) / 41.0; RVREF = np.stack([np.convolve(np.gradient(RQREF[:, j], DT), _k2, "same") for j in range(6)], axis=1); RAREF = np.stack([np.convolve(np.gradient(RVREF[:, j], DT), _k2, "same") for j in range(6)], axis=1)
 
 
 def run(case):
@@ -160,6 +169,18 @@ def run(case):
     sim.world.reset(); sim._apply_gains(); sim.set_state(P0_); sv = PosServo(POSE_A, DT)
     for _ in range(2500):
         sim.step(P0_, np.zeros(6), wheel_w=np.zeros(4), steer=np.zeros(4))
+    arm = None; Z6 = np.zeros(6); W40 = dict(wheel_w=np.zeros(4), steer=np.zeros(4))
+    if a.mit:
+        hold = sim.K * (P0_ - sim.q_link()); qr0 = (RQREF[0] if RQREF is not None else POSE_A).copy()
+        arm = MitArm(a, sim, P0_, qr0, mitarm.start_tff(a, hold, a.mit), a.mit, [int(x) - 1 for x in a.mit_tdc.split(",")], seed=a.seed)
+    for k_ in range(NPRE):                                               # 자리 잡기: AMR은 서 있고 팔은 기준(기록)을 따라간다
+        if arm is not None:
+            if RQ is not None: qm_, wm_ = arm.step(RQREF[k_], RVREF[k_], RAREF[k_], RQ[k_], RV[k_])
+            else: qm_, wm_ = arm.step(POSE_A, Z6, Z6, POSE_A, Z6)
+            sim.step(qm_, wm_, **W40)
+        elif RQ is not None: sim.step(RQ[k_], RV[k_], **W40)
+        else: sim.step(POSE_A, Z6, **W40)
+    dqff_last = np.zeros(6); vff = np.zeros(6); ERR = None
     Ta_ = a.v / 1.0; Tc_ = (XB + 0.9 - a.v * Ta_) / a.v; bz_ = a.bshape == "zvd" or "bz" in tok; BI = shaper("zvd", a.bsf, 0.10) if bz_ else [(1.0, 0.0)]
 
     def vprof(tt):
@@ -173,6 +194,7 @@ def run(case):
         return 0.0
     T = (0.1 + 2 * Ta_ + Tc_ + 0.3 + a.tail) if a.stop else (0.3 + (XB + 0.3 + 0.5) / a.v + 2.0)
     n = int(T * sim.hz); t = np.arange(n) * DT; TE = np.zeros((n, 3)); te_ = np.zeros(3); OFF_ = None
+    ERR = np.zeros((n, 3))
     G = np.zeros((n, 3)); XBASE = np.zeros(n); DQ = np.zeros((n, 6)); A6 = np.zeros((n, 6)); EV = np.zeros((n, 3)); BV = np.zeros((n, 6))
     v_prev = np.zeros(6); af = np.zeros(6); gf = np.zeros(3); al = 1 - math.exp(-2 * math.pi * a.lp * DT)
     abuf = [np.zeros(6)] * NB; gbuf = [np.zeros(3)] * NB
@@ -205,6 +227,7 @@ def run(case):
             dq += FF @ abuf[-1 - ffd]
         elif servo and not mp_servo:
             dq += FF @ abuf[-1 - 10]
+        dq_ff = dq.copy()                                              # 여기까지가 미리 넣는 보정, 아래는 끝단 되먹임
         if dd is not None:                                             # 끝단 자이로 되먹임 감쇠
             s0 = gbuf[-1 - dd]; s1 = gbuf[-1 - dd - 4]; ds = (s0 - s1) / (4 * DT)
             for ax_, j, f, sg_ in FBMAP:                                # 끄덕임 → J5(또는 J2), 좌우 → J1
@@ -245,9 +268,17 @@ def run(case):
         if a.dq_step > 0:
             st_ = math.radians(a.dq_step); dq = np.round(dq / st_) * st_
         DQ[i] = dq
-        if KICKS: dq = dq + kick_at(t[i])
-        if RQ is not None:                                             # 팔이 움직이는 중: 재생 각도 위에 보정을 더한다
-            ii = min(i, len(RQ) - 1); q, w_ = RQ[ii] + dq, RV[ii]
+        kq = kick_at(t[i]) if KICKS else Z6; dq_all = dq; dq = dq + kq
+        ii = min(NPRE + i, len(RQ) - 1) if RQ is not None else 0
+        if arm is not None:                                            # MIT 모드: 미리 넣는 보정은 위치 기준에, 되먹임은 링크에 닿는 토크로
+            if i % 10 == 0: vff = (dq_ff - dqff_last) / 0.01 if i else Z6; dqff_last = dq_ff.copy()
+            qb_, wb_ = (RQ[ii], RV[ii]) if RQ is not None else (POSE_A, Z6)
+            qf_, vf_, af_ = (RQREF[ii], RVREF[ii], RAREF[ii]) if RQ is not None else (POSE_A, Z6, Z6)
+            qm_, wm_ = arm.step(qf_ + dq_ff, vf_ + vff, af_, qb_ + dq, wb_)
+            ERR[i] = (qf_ - qm_)[:3]
+            q = qm_.copy(); q[:3] += (dq_all - dq_ff)[:3] + kq[:3]; w_ = wm_.copy()
+        elif RQ is not None:                                           # 팔이 움직이는 중: 재생 각도 위에 보정을 더한다
+            q, w_ = RQ[ii] + dq, RV[ii]; ERR[i] = (RQREF[ii] - RQ[ii])[:3]
         elif servo:
             q, w_ = sv.step(POSE_A + dq)
         else:
@@ -259,7 +290,7 @@ def run(case):
         G[i] = g_now; A6[i] = af; EV[i] = sim.ee_vel()[0]; BV[i] = v6
         if i % 5 == 0:                                                 # 끝단 위치가 기준 궤적에서 벗어난 양: J_v (q_링크 - q_기준)
             Jv = np.asarray(sim.art.get_jacobians())[0, EEB, :3, :]; Jv = Jv[:, Jv.shape[1] - sim.n + sim.ia]
-            qd_ = RQREF[min(i, len(RQREF) - 1)] if RQREF is not None else POSE_A
+            qd_ = RQREF[ii] if RQREF is not None else POSE_A
             te_ = Jv @ (sim.q_link() - qd_)
             if OFF_ is None: OFF_ = te_.copy()                         # 시작할 때의 정적 처짐은 뺀다
         TE[i] = te_ - (OFF_ if OFF_ is not None else 0.0)
@@ -307,7 +338,9 @@ def run(case):
     row = dict(case=case, bz=int(bz_), still=int(a.still), replay=os.path.basename(a.replay)[:40] if a.replay else "", full_vec=fg_, full_roll=fax_[0], full_pitch=fax_[1], full_yaw=fax_[2], kept_s=float(np.sum(mf) * DT), t0=a.replay_t0, full_acc_lo=fa_[0], full_acc_hi=fa_[1], tip_vib_mm=tv_, tip_err_mm=terr_, tip_peak_mm=tpk_, bshape=a.bshape, ee_acc_lo=ea_lo, ee_acc_hi=ea_hi, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
                dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), dq_pk_j1=float(np.degrees(np.max(np.abs(DQ[:, 0])))), dq_pk_j2=float(np.degrees(np.max(np.abs(DQ[:, 1])))), dq_pk_j5=float(np.degrees(np.max(np.abs(DQ[:, 4])))),
                tau_pk_j1=float(sim.K[0] * np.max(np.abs(DQ[:, 0]))), tau_pk_j2=float(sim.K[1] * np.max(np.abs(DQ[:, 1]))), tau_pk_j5=float(sim.K[4] * np.max(np.abs(DQ[:, 4]))), sat=SAT[0] / max(1, SAT[1]), zadd=a.zadd, fbp=a.fbp, tau_clip=a.tau_clip, tau_step=a.tau_step, tau_share=a.tau_share, kick=a.kick,
-               full_acc_20_40=fa2_, t_front=tf, x_end=float(XBASE[-1] - x0))
+               full_acc_20_40=fa2_, t_front=tf, x_end=float(XBASE[-1] - x0), mit=a.mit, mit_tdc=a.mit_tdc if a.mit and a.mit != "pd" else "", pre=a.pre,
+               **{f"err_j{j + 1}": float(np.degrees(np.std(ERR[mf, j]))) for j in range(3)}, **{f"errm_j{j + 1}": float(np.degrees(np.mean(ERR[mf, j]))) for j in range(3)},
+               n_ratelim=arm.nlim if arm is not None else 0, **{f"slip_j{j + 1}": (float(arm.nslip[j]) / max(1, arm.k) if arm is not None else float("nan")) for j in range(3)})
     if a.keep:
         np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, te=TE, tf=tf, tr=tr)
     return row

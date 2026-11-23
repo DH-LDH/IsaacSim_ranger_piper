@@ -1,0 +1,6 @@
+m2s s1_tde --file /home/da/piper_ws/docs/data/raw/scn/20261029_110813_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0
+m2s s1_asmc --file /home/da/piper_ws/docs/data/raw/scn/20261029_111226_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0
+m2s s2_tde --file /home/da/piper_ws/docs/data/raw/scn/20261029_203040_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0
+m2s s2_asmc --file /home/da/piper_ws/docs/data/raw/scn/20261029_112534_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0
+m2s s3_tde --file /home/da/piper_ws/docs/data/raw/scn/20261029_205503_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0
+m2s s3_asmc --file /home/da/piper_ws/docs/data/raw/scn/20261029_205725_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0

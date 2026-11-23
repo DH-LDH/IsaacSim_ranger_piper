@@ -1,0 +1,15 @@
+m3 pd_chk --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_150540_ramp_j2_v10_d+10_r6_d1b5_v10_005_pd.csv.gz
+m3 pd_qn --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_150540_ramp_j2_v10_d+10_r6_d1b5_v10_005_pd.csv.gz --qd-noise 0.01
+m3 tde_qn --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --qd-noise 0.01
+m3 asmc_qn --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz --qd-noise 0.01
+m3 asmc3_qn --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153541_ramp_j2_v10_d+10_r6_d1b5_v10_013_asmc3.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --qd-noise 0.01
+m3 tde_qn2 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --qd-noise 0.02
+m3 asmc_qn2 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz --qd-noise 0.02
+m3 tde_qn_g27 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --qd-noise 0.01 --G 3.18,2.74,3.0 --c0 0,1.25,0.88
+m3 tde_qn_g43 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --qd-noise 0.01 --G 3.18,4.33,3.0 --c0 0,5.36,0.88
+m3s s1_tde --file /home/da/piper_ws/docs/data/raw/scn/20261029_110813_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m3s s1_asmc --file /home/da/piper_ws/docs/data/raw/scn/20261029_111226_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m3s s2_tde --file /home/da/piper_ws/docs/data/raw/scn/20261029_203040_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m3s s2_asmc --file /home/da/piper_ws/docs/data/raw/scn/20261029_112534_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m3s s3_tde --file /home/da/piper_ws/docs/data/raw/scn/20261029_205503_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m3s s3_asmc --file /home/da/piper_ws/docs/data/raw/scn/20261029_205725_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01

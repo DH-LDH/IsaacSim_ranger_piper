@@ -1,0 +1,12 @@
+m2 pd_base --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_150540_ramp_j2_v10_d+10_r6_d1b5_v10_005_pd.csv.gz
+m2 tde_base --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz
+m2 asmc_base --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz
+m2 pd_td20 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_150540_ramp_j2_v10_d+10_r6_d1b5_v10_005_pd.csv.gz --Td 20
+m2 tde_td20 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --Td 20
+m2 asmc_td20 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz --Td 20
+m2 tde_jm02 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --Jm 0.02
+m2 tde_jm10 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --Jm 0.10
+m2 tde_qn --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_153055_ramp_j2_v10_d+10_r6_d1b5_v10_011_tde.csv.gz --qd-noise 0.01
+m2 asmc_jm02 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz --Jm 0.02
+m2 asmc_jm10 --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz --Jm 0.10
+m2 asmc_qn --file /home/da/piper_ws/docs/data/raw/d1b5/20261119_152841_ramp_j2_v10_d+10_r6_d1b5_v10_010_asmc.csv.gz --qd-noise 0.01

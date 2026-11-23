@@ -1,0 +1,12 @@
+m4s s1_tde_n3 --file /home/da/piper_ws/docs/data/raw/scn/20261029_110813_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m4s s1_asmc_n3 --file /home/da/piper_ws/docs/data/raw/scn/20261029_111226_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m4s s2_tde_n3 --file /home/da/piper_ws/docs/data/raw/scn/20261029_203040_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m4s s2_asmc_n3 --file /home/da/piper_ws/docs/data/raw/scn/20261029_112534_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m4s s3_tde_n3 --file /home/da/piper_ws/docs/data/raw/scn/20261029_205503_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m4s s3_asmc_n3 --file /home/da/piper_ws/docs/data/raw/scn/20261029_205725_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m4s s1_tde_n5 --file /home/da/piper_ws/docs/data/raw/scn/20261029_110813_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.05
+m4s s1_asmc_n5 --file /home/da/piper_ws/docs/data/raw/scn/20261029_111226_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.05
+m4s s2_tde_n5 --file /home/da/piper_ws/docs/data/raw/scn/20261029_203040_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.05
+m4s s2_asmc_n5 --file /home/da/piper_ws/docs/data/raw/scn/20261029_112534_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.05
+m4s s3_tde_n5 --file /home/da/piper_ws/docs/data/raw/scn/20261029_205503_sine.csv.gz --ctrl tde --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.05
+m4s s3_asmc_n5 --file /home/da/piper_ws/docs/data/raw/scn/20261029_205725_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.05

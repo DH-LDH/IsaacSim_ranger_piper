@@ -1,0 +1,6 @@
+tk5r_s1_tde3 --stop --still --pre 1.5 --mit tde --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+tk5r_s1_asmc3 --stop --still --pre 1.5 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+tk5r_s2_tde3 --stop --still --pre 1.5 --mit tde --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204150_slow_j12_sxy.csv.gz
+tk5r_s2_asmc3 --stop --still --pre 1.5 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204150_slow_j12_sxy.csv.gz
+tk5r_s3_tde3 --stop --still --pre 1.5 --mit tde --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
+tk5r_s3_asmc3 --stop --still --pre 1.5 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
