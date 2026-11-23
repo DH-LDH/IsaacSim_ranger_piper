@@ -22,9 +22,11 @@ AMR이 등속으로 가다가 바닥의 턱(높이 --h, 길이 3 cm, 앞바퀴 �
 출력: out/exp5_<tag>.csv — 끝단 자이로 세 축 2–20 Hz rms: 전체 / 앞바퀴 구간 / 뒷바퀴 구간.
 타이어 탄성은 접촉 강성(--tire-k, 기본 150 kN/m)으로 넣는다. 실물 타이어 값은 모른다 — 절댓값이 아니라 조건끼리의 비로 본다.
 """
-import argparse, csv, math, os, time
+import argparse, csv, math, os, sys, time
+if "--gui" in sys.argv:
+    os.environ.setdefault("VIBSIM_GUI", "1")   # 화면으로 보기: vibsim을 들이기 전에 켠다
 import numpy as np
-from vibsim import HERE, POSE_A, POSE_B, WHEEL_R, PosServo, VibSim, band   # vibsim이 먼저 Isaac을 띄운다
+from vibsim import HERE, POSE_A, POSE_B, WHEEL_R, PosServo, VibSim, app, band   # vibsim이 먼저 Isaac을 띄운다
 from pxr import Gf, UsdGeom, UsdPhysics
 
 ap = argparse.ArgumentParser()
@@ -40,6 +42,7 @@ ap.add_argument("--yaw", type=float, default=90.0, help="팔 장착 방향[deg]:
 ap.add_argument("--blen", type=float, default=0.03, help="턱 길이[m]"); ap.add_argument("--side", type=int, default=0, help="1이면 왼쪽 바퀴만 넘는 턱")
 ap.add_argument("--pose", default="A"); ap.add_argument("--dq-step", type=float, default=0.0, help="보정각 분해능[deg]"); ap.add_argument("--dq-dead", type=float, default=0.0, help="보정각 불감대[deg]")
 ap.add_argument("--lib-from", default="", help="지도 예견에 쓸 베이스 가속도 지도를 다른 실행(태그)에서 가져온다 — 다른 크기·속도의 턱에서 만든 지도를 쓰는 경우")
+ap.add_argument("--gui", action="store_true", help="Isaac Sim 창을 띄워 실시간으로 본다"); ap.add_argument("--loops", type=int, default=1, help="조건 목록을 몇 번 되풀이할지(0 = 창을 닫을 때까지)"); ap.add_argument("--slow", type=float, default=1.0)
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--replay", default="", help="팔을 유지하는 대신 실측 엔코더 기록(csv.gz)을 재생하면서 넘는다"); ap.add_argument("--replay-t0", type=float, default=8.0)
 ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
@@ -52,6 +55,7 @@ os.makedirs(HERE + "/out", exist_ok=True)
 XB, LWB = 0.75, 0.494                        # 턱 위치[m], 축간 거리[m]
 def box(name, x0, x1, top, y0=-1.0, y1=1.0):
     c = UsdGeom.Cube.Define(sim.stage, "/World/" + name); c.CreateSizeAttr(1.0)
+    c.CreateDisplayColorAttr([Gf.Vec3f(0.9, 0.25, 0.1) if name in ("bump", "deck_hole") else Gf.Vec3f(0.55, 0.6, 0.65)])
     xf = UsdGeom.Xformable(c); xf.AddTranslateOp().Set(Gf.Vec3d((x0 + x1) / 2, (y0 + y1) / 2, top - 0.05)); xf.AddScaleOp().Set(Gf.Vec3f(x1 - x0, y1 - y0, 0.1))
     UsdPhysics.CollisionAPI.Apply(c.GetPrim())
 
@@ -61,6 +65,14 @@ if a.pothole > 0:
 else:
     box("bump", XB - a.blen / 2, XB + a.blen / 2, a.h, 0.0 if a.side else -1.0, 1.0)
 
+if a.gui:
+    try:
+        from pxr import UsdLux
+        UsdLux.DomeLight.Define(sim.stage, "/World/dome").CreateIntensityAttr(800.0)
+        from isaacsim.core.utils.viewports import set_camera_view
+        set_camera_view(eye=[XB + 0.9, -1.7, 0.75 + ZP], target=[XB + 0.1, 0.0, 0.3 + ZP])
+    except Exception as e:  # noqa: BLE001
+        print("카메라·조명 설정 건너뜀:", e)
 sim.world.reset(); sim._apply_gains(); sim.set_state(POSE_A)
 for _ in range(2500):
     sim.step(POSE_A, np.zeros(6), wheel_w=np.zeros(4), steer=np.zeros(4))
@@ -101,7 +113,7 @@ def run(case):
     G = np.zeros((n, 3)); XBASE = np.zeros(n); DQ = np.zeros((n, 6)); A6 = np.zeros((n, 6))
     v_prev = np.zeros(6); af = np.zeros(6); gf = np.zeros(3); al = 1 - math.exp(-2 * math.pi * a.lp * DT)
     abuf = [np.zeros(6)] * NB; gbuf = [np.zeros(3)] * NB
-    t_f = None; rec = []; i_rear = None; x0 = None
+    t_f = None; rec = []; i_rear = None; x0 = None; tw0 = time.time()
     lp_lag = 1.0 / (2 * math.pi * a.lp)       # 저역 통과가 더하는 지연(대략)
     for i in range(n):
         vc = min(a.v, 1.0 * max(0.0, t[i] - 0.1))
@@ -160,6 +172,9 @@ def run(case):
         else:
             q, w_ = POSE_A + dq, np.zeros(6)
         sim.step(q, w_, wheel_w=np.full(4, vc / WHEEL_R), steer=np.zeros(4))
+        if a.gui and i % 20 == 0:
+            sim.world.render(); lag_ = i * DT * a.slow - (time.time() - tw0)
+            if lag_ > 0: time.sleep(lag_)
         G[i] = g_now; DQ[i] = dq; A6[i] = af
         p = np.asarray(sim.bb.get_world_poses()[0])[0]; XBASE[i] = p[0]
         if x0 is None: x0 = p[0]
@@ -181,16 +196,28 @@ def run(case):
             f_, r_ = A6[i0:i0 + 600, 2], A6[j0 + lag:j0 + lag + 600, 2]
             if len(r_) == 600: best = max(best, float(np.corrcoef(f_, r_)[0, 1]))
         globals()["CORR"] = best
-    row = dict(case=case, mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
+    mb = (t >= tf - 0.1) & (t < tr + 1.5)
+    bb_ = [float(np.sqrt(np.mean(band(A6[mb, c], sim.hz, 2.0, 20.0) ** 2))) for c in (0, 2, 4)]
+    row = dict(case=case, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
                dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), t_front=tf, x_end=float(XBASE[-1] - x0))
     if a.keep:
         np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, tf=tf, tr=tr)
     return row
 
 
-tw = time.time(); rows = []
-for case in a.cases.split(","):
-    rows.append(run(case)); print("ROW", {k: (round(v, 5) if isinstance(v, float) else v) for k, v in rows[-1].items()}, flush=True)
+tw = time.time(); rows = []; lp_ = 0
+while True:
+    rows = []
+    for case in a.cases.split(","):
+        rows.append(run(case)); r_ = rows[-1]; b_ = rows[0]
+        if a.gui:
+            print(f"[{lp_ + 1}] {case:24s} 끝단 진동 {r_['vec']:.4f} rad/s (대책 없음의 {r_['vec'] / b_['vec']:.2f}배; 앞바퀴 구간 {r_['front'] / b_['front']:.2f}, 뒷바퀴 구간 {r_['rear'] / b_['rear']:.2f})"
+                  f" | 베이스 상하 가속도 {r_['base_az_rms']:.2f} m/s², 앞뒤 {r_['base_ax_rms']:.2f} m/s²", flush=True)
+        else:
+            print("ROW", {k: (round(v, 5) if isinstance(v, float) else v) for k, v in r_.items()}, flush=True)
+        if a.gui and not app.is_running(): break
+    lp_ += 1
+    if (a.loops and lp_ >= a.loops) or (a.gui and not app.is_running()) or (not a.gui and not a.loops): break
 with open(HERE + f"/out/exp6_{a.tag}.csv", "w", newline="") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0].keys())); w.writeheader(); w.writerows(rows)
 b = rows[0]

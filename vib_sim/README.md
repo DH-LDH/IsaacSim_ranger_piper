@@ -18,6 +18,7 @@ python3 fit_servo.py                            # 서보 모형을 실측 명령
 ~/nonmoon/.venv_pptx/bin/python make_figs.py    # figs/*.png, figs/summary.md
 ```
 
+- **한 줄로 보기:** `~/isaacsim/python.sh show.py <start|bump|pothole|arm> <제어기>` — 예: `show.py bump preview`, `show.py pothole rearz`, `show.py start zvd`, `show.py arm asmc --scn 3`. 인자 없이 실행하면 목록이 나온다.
 - 눈으로 보기: `VIBSIM_GUI=1 ~/isaacsim/python.sh view.py --scene amr --case none` (옵션은 `view.py` 맨 위 설명). 실험 스크립트(exp1·exp2)는 화면을 그리지 않는다.
 - 실측 기록 재생을 눈으로 보기: `~/isaacsim/python.sh view_replay.py --scn 1 --ctrl pos --base move` (시나리오 1·2·3 × pos·tde·asmc × 베이스 fixed·still·move·zvd, 옵션은 파일 맨 위 설명).
 - 모터 쪽 동역학 1차 모형(MIT 펌웨어 PD + 정지 마찰): `exp4_mit.py --exp fit|base`. **실측과 대조가 안 된 상태**(정지 마찰 크기를 모름) — 결과로 쓰지 않는다.
