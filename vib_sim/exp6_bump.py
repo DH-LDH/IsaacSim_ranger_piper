@@ -46,6 +46,9 @@ ap.add_argument("--pose", default="A"); ap.add_argument("--dq-step", type=float,
 ap.add_argument("--lib-from", default="", help="지도 예견에 쓸 베이스 가속도 지도를 다른 실행(태그)에서 가져온다 — 다른 크기·속도의 턱에서 만든 지도를 쓰는 경우")
 ap.add_argument("--gui", action="store_true", help="Isaac Sim 창을 띄워 실시간으로 본다"); ap.add_argument("--loops", type=int, default=1, help="조건 목록을 몇 번 되풀이할지(0 = 창을 닫을 때까지)"); ap.add_argument("--slow", type=float, default=1.0)
 ap.add_argument("--stop", action="store_true", help="종합 시나리오: 출발 → 턱 → 0.9 m 더 가서 정지(1 m/s^2). 지표는 전체 구간")
+ap.add_argument("--fbp", type=int, default=5, help="끄덕임 되먹임을 넣는 관절: 5(기본) 또는 2(실기 감쇠층의 통로). 부호를 뒤집으려면 음수")
+ap.add_argument("--tau-clip", type=float, default=0.0, help="되먹임 보정의 토크 한계[N·m] — 관절 스프링을 거치는 토크 K_j·|Δq| 를 이 값으로 자른다. 0 = 없음")
+ap.add_argument("--kick", default="", help="충격성 외란(MIT 순간 튐 흉내): \"관절,도,시각;...\" — 모터 쪽이 20 ms에 튀고 80 ms 시정수로 돌아온다")
 ap.add_argument("--tail", type=float, default=2.0, help="종합 시나리오에서 정지한 뒤 더 재는 시간[s]")
 ap.add_argument("--still", action="store_true", help="AMR을 세워 둔다(팔만 움직이는 기준)")
 ap.add_argument("--bshape", default="none", help="AMR 속도 명령 성형을 모든 조건에: none / zvd (조건 토큰 bz로 조건마다 켤 수도 있다)"); ap.add_argument("--bsf", type=float, default=4.125)
@@ -91,6 +94,26 @@ FF = M[off + sim.ia][:, :6] / sim.K[:, None]  # 베이스 가속도(병진 xyz, 
 FLIP = np.array([1, 1, 1, 1, -1, 1.0])        # 뒷바퀴가 넘을 때: 차체 끄덕임(wy)만 부호 반대
 DT = sim.dt; NB = 200; LIB = None; CORR = float("nan")
 RQ = RV = RQREF = None; JMP = []
+FBMAP = ((1, abs(a.fbp) - 1, a.fp, 1.0 if a.fbp > 0 else -1.0), (2, 0, a.fy, 1.0))
+KICKS = [(int(k_.split(",")[0]) - 1, math.radians(float(k_.split(",")[1])), float(k_.split(",")[2])) for k_ in a.kick.split(";") if k_]
+SAT = [0, 0]
+
+
+def clipj(j, v):
+    """되먹임 보정 한 관절의 토크 한계: K_j·|Δq| <= tau_clip"""
+    SAT[1] += 1
+    if a.tau_clip <= 0: return v
+    lim = a.tau_clip / sim.K[j]
+    if abs(v) > lim: SAT[0] += 1
+    return float(np.clip(v, -lim, lim))
+
+
+def kick_at(tt):
+    k_ = np.zeros(6)
+    for j, A_, t0_ in KICKS:
+        u = tt - t0_
+        if u > 0: k_[j] += A_ * (min(1.0, u / 0.02) if u < 0.02 else math.exp(-(u - 0.02) / 0.08))
+    return k_
 EEB = list(sim.art.body_names).index("gripper_base")      # 끝단 위치 오차용 야코비안의 몸체 번호
 if a.replay:
     import csv as _csv, gzip as _gz
@@ -122,7 +145,7 @@ def run(case):
     if dj is not None:
         dmp = None
     dd = int(dmp[4:].rstrip("p")) if dmp else None; dpred = bool(dmp and dmp.endswith("p"))
-    rng = np.random.default_rng(a.seed); dq_fb = np.zeros(6); ages = []
+    rng = np.random.default_rng(a.seed); dq_fb = np.zeros(6); ages = []; SAT[0] = SAT[1] = 0
     P0_ = RQ[0] if RQ is not None else POSE_A
     sim.world.reset(); sim._apply_gains(); sim.set_state(P0_); sv = PosServo(POSE_A, DT)
     for _ in range(2500):
@@ -174,12 +197,12 @@ def run(case):
             dq += FF @ abuf[-1 - 10]
         if dd is not None:                                             # 끝단 자이로 되먹임 감쇠
             s0 = gbuf[-1 - dd]; s1 = gbuf[-1 - dd - 4]; ds = (s0 - s1) / (4 * DT)
-            for ax_, j, f in ((1, 4, a.fp), (2, 0, a.fy)):             # 끄덕임 → J5, 좌우 → J1
+            for ax_, j, f, sg_ in FBMAP:                                # 끄덕임 → J5(또는 J2), 좌우 → J1
                 w = 2 * math.pi * f; val = s0[ax_]
                 if dpred:
                     ph = w * (dd / 1000.0 + lp_lag)
                     val = s0[ax_] * math.cos(ph) + ds[ax_] / w * math.sin(ph)   # 한 주파수 울림이라고 보고 앞당김
-                dq[j] += -(2 * a.zadd / w) * val
+                dq[j] += clipj(j, -sg_ * (2 * a.zadd / w) * val)
         if dr is not None:
             # 끝단 각속도 → 모드 주파수의 대역 통과(공진기) → 지연만큼 위상을 당김 → 모터 쪽을 반대로.
             # 미분을 쓰지 않고 공진기의 두 상태(대역 통과 출력과 그 90도 늦은 값)로 당기므로 모드보다 빠른 성분은 줄어든 채 나간다.
@@ -187,30 +210,32 @@ def run(case):
             if (not jit) or i % 10 == 0:
                 age = int(np.clip(rng.lognormal(math.log(22.5), 0.469), 8, 150)) if jit else int(dr)
                 nsub = 10 if jit else 1
-                for kk, (ax_, j, f) in enumerate(((1, 4, a.fp), (2, 0, a.fy))):
+                for kk, (ax_, j, f, sg_) in enumerate(FBMAP):
                     w = 2 * math.pi * f; u = gbuf[-1 - age][ax_]
                     for _s in range(nsub):
                         acc_ = (w / a.Q) * (u - RZ[kk, 1]) - w * w * RZ[kk, 0]
                         RZ[kk, 1] += acc_ * DT; RZ[kk, 0] += RZ[kk, 1] * DT
                     ph = w * (age / 1000.0 + lp_lag + (0.005 if jit else 0.0))
                     y_lead = RZ[kk, 1] * math.cos(ph) - w * RZ[kk, 0] * math.sin(ph)
-                    dq_fb[j] = -(2 * a.zadd / w) * y_lead
+                    dq_fb[j] = clipj(j, -sg_ * (2 * a.zadd / w) * y_lead)
             dq = dq + dq_fb
         if dj is not None:
             if i % 10 == 0:                                            # 10 ms마다 한 번 계산하고 그 사이에는 값을 유지
                 age = int(np.clip(rng.lognormal(math.log(22.5), 0.469), 8, 150)); ages.append(age)   # 중앙 22.5 ms, 95% 48.7 ms
                 s0 = gbuf[-1 - age]; ds = (s0 - gbuf[-1 - age - 4]) / (4 * DT)
                 gfac = 0.0 if ("s" in dj and age > 40) else (min(1.0, 25.0 / age) if "g" in dj else 1.0)
-                for ax_, j, f in ((1, 4, a.fp), (2, 0, a.fy)):
+                for ax_, j, f, sg_ in FBMAP:
                     w = 2 * math.pi * f; val = s0[ax_]
                     if "n" not in dj:                                  # 표본 나이를 알고 그만큼 앞당김
                         ph = w * (age / 1000.0 + lp_lag + 0.005); val = s0[ax_] * math.cos(ph) + ds[ax_] / w * math.sin(ph)
-                    dq_fb[j] = -(2 * a.zadd / w) * val * gfac
+                    dq_fb[j] = clipj(j, -sg_ * (2 * a.zadd / w) * val * gfac)
             dq = dq + dq_fb
         if a.dq_dead > 0:
             dq = np.where(np.abs(dq) < math.radians(a.dq_dead), 0.0, dq)
         if a.dq_step > 0:
             st_ = math.radians(a.dq_step); dq = np.round(dq / st_) * st_
+        DQ[i] = dq
+        if KICKS: dq = dq + kick_at(t[i])
         if RQ is not None:                                             # 팔이 움직이는 중: 재생 각도 위에 보정을 더한다
             ii = min(i, len(RQ) - 1); q, w_ = RQ[ii] + dq, RV[ii]
         elif servo:
@@ -221,7 +246,7 @@ def run(case):
         if a.gui and i % 20 == 0:
             sim.world.render(); lag_ = i * DT * a.slow - (time.time() - tw0)
             if lag_ > 0: time.sleep(lag_)
-        G[i] = g_now; DQ[i] = dq; A6[i] = af; EV[i] = sim.ee_vel()[0]; BV[i] = v6
+        G[i] = g_now; A6[i] = af; EV[i] = sim.ee_vel()[0]; BV[i] = v6
         if i % 5 == 0:                                                 # 끝단 위치가 기준 궤적에서 벗어난 양: J_v (q_링크 - q_기준)
             Jv = np.asarray(sim.art.get_jacobians())[0, EEB, :3, :]; Jv = Jv[:, Jv.shape[1] - sim.n + sim.ia]
             qd_ = RQREF[min(i, len(RQREF) - 1)] if RQREF is not None else POSE_A
@@ -266,10 +291,13 @@ def run(case):
     for j0_, j1_ in JMP: mf &= ~((t >= j0_) & (t < j1_))
     fax_ = [float(np.sqrt(np.mean(band(G[:, c], sim.hz, 2.0, 20.0)[mf] ** 2))) for c in range(3)]; fg_ = float(np.sqrt(sum(x_ ** 2 for x_ in fax_)))
     fa_ = [float(np.sqrt(sum(np.mean(np.gradient(band(EV[:, c], sim.hz, lo_, hi_), DT)[mf] ** 2) for c in range(3)))) for lo_, hi_ in ((2.0, 10.0), (10.0, 20.0))]
+    fa2_ = float(np.sqrt(sum(np.mean(np.gradient(band(EV[:, c], sim.hz, 20.0, 40.0), DT)[mf] ** 2) for c in range(3))))
     tv_ = float(np.sqrt(sum(np.mean(band(TE[:, c], sim.hz, 2.0, 20.0)[mf] ** 2) for c in range(3)))) * 1000.0
     terr_ = float(np.sqrt(np.mean(np.sum(TE[mf] ** 2, axis=1)))) * 1000.0; tpk_ = float(np.max(np.linalg.norm(TE[mf], axis=1))) * 1000.0
     row = dict(case=case, bz=int(bz_), still=int(a.still), replay=os.path.basename(a.replay)[:40] if a.replay else "", full_vec=fg_, full_roll=fax_[0], full_pitch=fax_[1], full_yaw=fax_[2], kept_s=float(np.sum(mf) * DT), t0=a.replay_t0, full_acc_lo=fa_[0], full_acc_hi=fa_[1], tip_vib_mm=tv_, tip_err_mm=terr_, tip_peak_mm=tpk_, bshape=a.bshape, ee_acc_lo=ea_lo, ee_acc_hi=ea_hi, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
-               dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), t_front=tf, x_end=float(XBASE[-1] - x0))
+               dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), dq_pk_j1=float(np.degrees(np.max(np.abs(DQ[:, 0])))), dq_pk_j2=float(np.degrees(np.max(np.abs(DQ[:, 1])))), dq_pk_j5=float(np.degrees(np.max(np.abs(DQ[:, 4])))),
+               tau_pk_j1=float(sim.K[0] * np.max(np.abs(DQ[:, 0]))), tau_pk_j2=float(sim.K[1] * np.max(np.abs(DQ[:, 1]))), tau_pk_j5=float(sim.K[4] * np.max(np.abs(DQ[:, 4]))), sat=SAT[0] / max(1, SAT[1]), zadd=a.zadd, fbp=a.fbp, tau_clip=a.tau_clip, kick=a.kick,
+               full_acc_20_40=fa2_, t_front=tf, x_end=float(XBASE[-1] - x0))
     if a.keep:
         np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, te=TE, tf=tf, tr=tr)
     return row

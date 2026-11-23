@@ -1,0 +1,16 @@
+tq_c036 --fbp 2 --tau-clip 0.36
+tq_c060 --fbp 2 --tau-clip 0.60
+tq_c120 --fbp 2 --tau-clip 1.20
+tq_z06 --fbp 2 --zadd 0.6
+tq_z10 --fbp 2 --zadd 1.0
+tq_z20 --fbp 2 --zadd 2.0
+tq_z06_c036 --fbp 2 --zadd 0.6 --tau-clip 0.36
+tq_z10_c036 --fbp 2 --zadd 1.0 --tau-clip 0.36
+tq_z20_c036 --fbp 2 --zadd 2.0 --tau-clip 0.36
+tq_k --fbp 2 --kick 5,-2.5,1.2;3,1.2,2.6;5,-2.5,4.6
+tq_k_c036 --fbp 2 --kick 5,-2.5,1.2;3,1.2,2.6;5,-2.5,4.6 --tau-clip 0.36
+tq_k_z10 --fbp 2 --kick 5,-2.5,1.2;3,1.2,2.6;5,-2.5,4.6 --zadd 1.0
+tq_k_z10_c036 --fbp 2 --kick 5,-2.5,1.2;3,1.2,2.6;5,-2.5,4.6 --zadd 1.0 --tau-clip 0.36
+tq_k_z20_c036 --fbp 2 --kick 5,-2.5,1.2;3,1.2,2.6;5,-2.5,4.6 --zadd 2.0 --tau-clip 0.36
+tq_j5_c036 --fbp 5 --tau-clip 0.36
+tq_j5_k --fbp 5 --kick 5,-2.5,1.2;3,1.2,2.6;5,-2.5,4.6
