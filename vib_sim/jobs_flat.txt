@@ -1,0 +1,3 @@
+fl_v50 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --stop --pothole 0.06 --h 0 --v 0.5
+fl_v30 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --stop --pothole 0.06 --h 0 --v 0.3
+fl_v50_noq --fbp 2 --stop --pothole 0.06 --h 0 --v 0.5

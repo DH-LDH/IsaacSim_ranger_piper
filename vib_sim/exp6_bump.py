@@ -48,6 +48,8 @@ ap.add_argument("--gui", action="store_true", help="Isaac Sim 창을 띄워 실�
 ap.add_argument("--stop", action="store_true", help="종합 시나리오: 출발 → 턱 → 0.9 m 더 가서 정지(1 m/s^2). 지표는 전체 구간")
 ap.add_argument("--fbp", type=int, default=5, help="끄덕임 되먹임을 넣는 관절: 5(기본) 또는 2(실기 감쇠층의 통로). 부호를 뒤집으려면 음수")
 ap.add_argument("--tau-clip", type=float, default=0.0, help="되먹임 보정의 토크 한계[N·m] — 관절 스프링을 거치는 토크 K_j·|Δq| 를 이 값으로 자른다. 0 = 없음")
+ap.add_argument("--tau-step", type=float, default=0.0, help="모터 토크 한 칸[N·m] (실기 0.15). 0 = 없음"); ap.add_argument("--tau-share", type=float, default=1.0, help="모터 토크 가운데 관절 스프링으로 가는 몫 K_j/(K_j+K_PD) (실기 J2 0.82–0.88)")
+ap.add_argument("--kick-old", action="store_true", help="충격 꼴을 11/23 오전 것(20 ms·80 ms, 다 돌아옴)으로")
 ap.add_argument("--kick", default="", help="충격성 외란(MIT 순간 튐 흉내): \"관절,도,시각;...\" — 모터 쪽이 20 ms에 튀고 80 ms 시정수로 돌아온다")
 ap.add_argument("--tail", type=float, default=2.0, help="종합 시나리오에서 정지한 뒤 더 재는 시간[s]")
 ap.add_argument("--still", action="store_true", help="AMR을 세워 둔다(팔만 움직이는 기준)")
@@ -103,16 +105,24 @@ def clipj(j, v):
     """되먹임 보정 한 관절의 토크 한계: K_j·|Δq| <= tau_clip"""
     SAT[1] += 1
     if a.tau_clip <= 0: return v
-    lim = a.tau_clip / sim.K[j]
-    if abs(v) > lim: SAT[0] += 1
-    return float(np.clip(v, -lim, lim))
+    tm = sim.K[j] * v / a.tau_share; lim = a.tau_clip                    # 모터 토크로 바꿔 한 칸 단위로 끊고 자른다
+    if a.tau_step > 0:
+        tm = round(tm / a.tau_step) * a.tau_step; lim = math.floor(a.tau_clip / a.tau_step + 1e-9) * a.tau_step
+    if abs(tm) >= lim - 1e-12 and abs(sim.K[j] * v / a.tau_share) > lim: SAT[0] += 1
+    return float(a.tau_share * np.clip(tm, -lim, lim) / sim.K[j])
 
 
 def kick_at(tt):
     k_ = np.zeros(6)
     for j, A_, t0_ in KICKS:
         u = tt - t0_
-        if u > 0: k_[j] += A_ * (min(1.0, u / 0.02) if u < 0.02 else math.exp(-(u - 0.02) / 0.08))
+        if u <= 0: continue
+        if a.kick_old:
+            k_[j] += A_ * (min(1.0, u / 0.02) if u < 0.02 else math.exp(-(u - 0.02) / 0.08)); continue
+        # 관절별 꼴(FW191_D_LOG 16.8절 (라), 659건): 오르는 시간, 돌아오는 시정수, 1 s 뒤 남는 각(펌웨어 PD만인 관절)
+        ri, ta, rs = {1: (0.015, 0.18, 0.12), 2: (0.018, 0.15, 0.09), 4: (0.052, 0.09, 0.04), 5: (0.020, 0.10, 0.13)}.get(j, (0.02, 0.10, 0.0))
+        rs = math.copysign(math.radians(rs), A_)
+        k_[j] += A_ * u / ri if u < ri else rs + (A_ - rs) * math.exp(-(u - ri) / ta)
     return k_
 EEB = list(sim.art.body_names).index("gripper_base")      # 끝단 위치 오차용 야코비안의 몸체 번호
 if a.replay:
@@ -296,7 +306,7 @@ def run(case):
     terr_ = float(np.sqrt(np.mean(np.sum(TE[mf] ** 2, axis=1)))) * 1000.0; tpk_ = float(np.max(np.linalg.norm(TE[mf], axis=1))) * 1000.0
     row = dict(case=case, bz=int(bz_), still=int(a.still), replay=os.path.basename(a.replay)[:40] if a.replay else "", full_vec=fg_, full_roll=fax_[0], full_pitch=fax_[1], full_yaw=fax_[2], kept_s=float(np.sum(mf) * DT), t0=a.replay_t0, full_acc_lo=fa_[0], full_acc_hi=fa_[1], tip_vib_mm=tv_, tip_err_mm=terr_, tip_peak_mm=tpk_, bshape=a.bshape, ee_acc_lo=ea_lo, ee_acc_hi=ea_hi, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
                dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), dq_pk_j1=float(np.degrees(np.max(np.abs(DQ[:, 0])))), dq_pk_j2=float(np.degrees(np.max(np.abs(DQ[:, 1])))), dq_pk_j5=float(np.degrees(np.max(np.abs(DQ[:, 4])))),
-               tau_pk_j1=float(sim.K[0] * np.max(np.abs(DQ[:, 0]))), tau_pk_j2=float(sim.K[1] * np.max(np.abs(DQ[:, 1]))), tau_pk_j5=float(sim.K[4] * np.max(np.abs(DQ[:, 4]))), sat=SAT[0] / max(1, SAT[1]), zadd=a.zadd, fbp=a.fbp, tau_clip=a.tau_clip, kick=a.kick,
+               tau_pk_j1=float(sim.K[0] * np.max(np.abs(DQ[:, 0]))), tau_pk_j2=float(sim.K[1] * np.max(np.abs(DQ[:, 1]))), tau_pk_j5=float(sim.K[4] * np.max(np.abs(DQ[:, 4]))), sat=SAT[0] / max(1, SAT[1]), zadd=a.zadd, fbp=a.fbp, tau_clip=a.tau_clip, tau_step=a.tau_step, tau_share=a.tau_share, kick=a.kick,
                full_acc_20_40=fa2_, t_front=tf, x_end=float(XBASE[-1] - x0))
     if a.keep:
         np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, te=TE, tf=tf, tr=tr)

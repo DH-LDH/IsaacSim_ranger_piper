@@ -1,0 +1,14 @@
+tq2_q --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85
+tq2_q_z10 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --zadd 1.0
+tq2_q_z20 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --zadd 2.0
+tq2_k --fbp 2 --kick 5,-2.46,1.2;3,1.43,2.6;5,-2.46,4.6
+tq2_k_q --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --kick 5,-2.46,1.2;3,1.43,2.6;5,-2.46,4.6
+tq2_k_q_z10 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --kick 5,-2.46,1.2;3,1.43,2.6;5,-2.46,4.6 --zadd 1.0
+tq2_b_h5 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --h 0.005
+tq2_b_h15 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --h 0.015
+tq2_b_v15 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --v 0.15
+tq2_b_v50 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --v 0.5
+tq2_b_pot --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --pothole 0.06
+tk4_s1 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --stop --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+tk4_s2 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --stop --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204150_slow_j12_sxy.csv.gz
+tk4_s3 --fbp 2 --tau-clip 0.36 --tau-step 0.15 --tau-share 0.85 --stop --replay /home/da/piper_ws/docs/data/raw/scn/20261029_204306_slow_j123_s3.csv.gz
