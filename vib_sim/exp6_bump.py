@@ -18,6 +18,8 @@ AMR이 등속으로 가다가 바닥의 턱(높이 --h, 길이 3 cm, 앞바퀴 �
   dampN     끝단 자이로 되먹임 감쇠, 지연 N ms.  끄덕임 → J5, 좌우 → J1 모터 쪽을 각속도 반대 방향으로 민다(감쇠비 +0.3 상당)
   dampJ     실기처럼: 100 Hz로 계산, 표본 나이가 매번 다름(중앙 22.5 ms, 95% 48.7 ms), 나이를 알고 그만큼 위상을 앞당김.
             dampJn = 앞당기지 않음, dampJs = 나이가 40 ms를 넘는 주기는 되먹임을 끔, dampJg = 나이에 반비례해 세기를 줄임
+  dampRN    감쇠만 더하기: 끝단 각속도를 모드 주파수의 공진기(대역 통과, --Q)에 넣고 그 상태로 위상을 당김(지연 N ms). 모드보다 빠른 성분을 건드리지 않는다.
+            dampRJ = 실기처럼 100 Hz·들쭉날쭉한 지연
   dampNp    같은 되먹임에 위상 예측: 울림이 한 주파수(끄덕임 7.5 Hz, 좌우 4.1 Hz)라고 보고 N ms 뒤의 값을 계산해 쓴다
 출력: out/exp5_<tag>.csv — 끝단 자이로 세 축 2–20 Hz rms: 전체 / 앞바퀴 구간 / 뒷바퀴 구간.
 타이어 탄성은 접촉 강성(--tire-k, 기본 150 kN/m)으로 넣는다. 실물 타이어 값은 모른다 — 절댓값이 아니라 조건끼리의 비로 본다.
@@ -44,6 +46,7 @@ ap.add_argument("--pose", default="A"); ap.add_argument("--dq-step", type=float,
 ap.add_argument("--lib-from", default="", help="지도 예견에 쓸 베이스 가속도 지도를 다른 실행(태그)에서 가져온다 — 다른 크기·속도의 턱에서 만든 지도를 쓰는 경우")
 ap.add_argument("--gui", action="store_true", help="Isaac Sim 창을 띄워 실시간으로 본다"); ap.add_argument("--loops", type=int, default=1, help="조건 목록을 몇 번 되풀이할지(0 = 창을 닫을 때까지)"); ap.add_argument("--slow", type=float, default=1.0)
 ap.add_argument("--rigid", action="store_true", help="팔을 강체로(관절 강성 100배) — 증폭이 없을 때의 전달률 기준")
+ap.add_argument("--Q", type=float, default=1.5, help="dampR 공진기의 Q(클수록 좁은 대역)")
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--replay", default="", help="팔을 유지하는 대신 실측 엔코더 기록(csv.gz)을 재생하면서 넘는다"); ap.add_argument("--replay-t0", type=float, default=8.0)
 ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
@@ -103,6 +106,10 @@ def run(case):
     mp_e = float(mp[4:]) / 1000.0 if mp and mp.startswith("mapE") else 0.0; mp_s = float(mp[4:]) / 100.0 if mp and mp.startswith("mapS") else 1.0
     mp_servo = mp == "mapservo"; servo = servo or mp_servo
     dmp = next((t for t in tok if t.startswith("damp")), None)
+    dr = dmp[5:] if dmp and dmp.startswith("dampR") else None        # 감쇠만 더하기: 모드 주파수의 공진기(대역 통과)를 거친 되먹임
+    if dr is not None:
+        dmp = None
+    RZ = np.zeros((2, 2))                                            # 축마다 공진기 상태 [z, dz] (끄덕임, 좌우)
     dj = dmp[5:] if dmp and dmp.startswith("dampJ") else None        # 실기처럼: 100 Hz 주기, 표본 나이가 매번 다름
     if dj is not None:
         dmp = None
@@ -153,6 +160,22 @@ def run(case):
                     ph = w * (dd / 1000.0 + lp_lag)
                     val = s0[ax_] * math.cos(ph) + ds[ax_] / w * math.sin(ph)   # 한 주파수 울림이라고 보고 앞당김
                 dq[j] += -(2 * a.zadd / w) * val
+        if dr is not None:
+            # 끝단 각속도 → 모드 주파수의 대역 통과(공진기) → 지연만큼 위상을 당김 → 모터 쪽을 반대로.
+            # 미분을 쓰지 않고 공진기의 두 상태(대역 통과 출력과 그 90도 늦은 값)로 당기므로 모드보다 빠른 성분은 줄어든 채 나간다.
+            jit = dr.startswith("J")
+            if (not jit) or i % 10 == 0:
+                age = int(np.clip(rng.lognormal(math.log(22.5), 0.469), 8, 150)) if jit else int(dr)
+                nsub = 10 if jit else 1
+                for kk, (ax_, j, f) in enumerate(((1, 4, a.fp), (2, 0, a.fy))):
+                    w = 2 * math.pi * f; u = gbuf[-1 - age][ax_]
+                    for _s in range(nsub):
+                        acc_ = (w / a.Q) * (u - RZ[kk, 1]) - w * w * RZ[kk, 0]
+                        RZ[kk, 1] += acc_ * DT; RZ[kk, 0] += RZ[kk, 1] * DT
+                    ph = w * (age / 1000.0 + lp_lag + (0.005 if jit else 0.0))
+                    y_lead = RZ[kk, 1] * math.cos(ph) - w * RZ[kk, 0] * math.sin(ph)
+                    dq_fb[j] = -(2 * a.zadd / w) * y_lead
+            dq = dq + dq_fb
         if dj is not None:
             if i % 10 == 0:                                            # 10 ms마다 한 번 계산하고 그 사이에는 값을 유지
                 age = int(np.clip(rng.lognormal(math.log(22.5), 0.469), 8, 150)); ages.append(age)   # 중앙 22.5 ms, 95% 48.7 ms
@@ -205,8 +228,11 @@ def run(case):
     def acc_rms(Vel):
         return float(np.sqrt(sum(np.mean(np.gradient(band(Vel[mb, c], sim.hz, 2.0, 20.0), DT) ** 2) for c in range(3))))
     ea_, ba_ = acc_rms(EV), acc_rms(BV[:, :3])
+    def acc_band(lo, hi):
+        return float(np.sqrt(sum(np.mean(np.gradient(band(EV[mb, c], sim.hz, lo, hi), DT) ** 2) for c in range(3))))
+    ea_lo, ea_hi = acc_band(2.0, 10.0), acc_band(10.0, 20.0)
     bg_ = float(np.sqrt(sum(np.mean(band(BV[mb, 3 + c], sim.hz, 2.0, 20.0) ** 2) for c in range(3))))
-    row = dict(case=case, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
+    row = dict(case=case, ee_acc_lo=ea_lo, ee_acc_hi=ea_hi, ee_acc_rms=ea_, base_acc_rms=ba_, trans=ea_ / ba_ if ba_ > 0 else float("nan"), base_gyro_rms=bg_, base_ax_rms=bb_[0], base_az_rms=bb_[1], base_pitch_acc_rms=bb_[2], mount_x=a.mount_x, mount_yaw=a.yaw, blen=a.blen, side=a.side, pose=a.pose, dq_step=a.dq_step, dq_dead=a.dq_dead, pothole=a.pothole, susp_k=a.susp_k, tire_k=a.tire_k, az_corr=CORR, base_az_peak=float(np.max(np.abs(A6[(t >= tf - 0.1) & (t < tr + 1.5), 2]))), v=a.v, h=a.h, vec=allv, front=fr, rear=re, roll=float(ax[0]), pitch=float(ax[1]), yaw=float(ax[2]),
                dq_peak_deg=float(np.degrees(np.max(np.abs(DQ)))), t_front=tf, x_end=float(XBASE[-1] - x0))
     if a.keep:
         np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, tf=tf, tr=tr)
