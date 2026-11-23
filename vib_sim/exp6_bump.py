@@ -65,6 +65,8 @@ ap.add_argument("--Q", type=float, default=1.5, help="dampR 공진기의 Q(클�
 ap.add_argument("--seed", type=int, default=1)
 ap.add_argument("--replay", default="", help="팔을 유지하는 대신 실측 엔코더 기록(csv.gz)을 재생하면서 넘는다"); ap.add_argument("--replay-t0", type=float, default=8.0)
 ap.add_argument("--lib-scale", type=float, default=1.0, help="가져온 지도에 곱할 배율(턱 높이 비 등)")
+ap.add_argument("--rec", default="", help="녹화: 조건마다 <이 값>_<조건>.mp4 와 끝단 흔들림 시계열(.npz)을 남긴다. 화면 없이 돌려도 된다(VIBSIM_USD=1 필요)")
+ap.add_argument("--rec-view", default="", help="카메라 \"ex,ey,ez,tx,ty,tz\" (비우면 경로 전체가 보이는 옆 시점)"); ap.add_argument("--rec-label", default="", help="영상 왼쪽 위에 적을 말(조건 이름 앞)")
 ap.add_argument("--ff-tau", action="store_true", help="MIT에서 미리 넣는 보정을 위치 기준뿐 아니라 토크에도 같이 넣는다: τ_ff += K·Δq / G (스프링이 전해야 할 토크를 PD가 아니라 τ_ff가 낸다)")
 ap.add_argument("--k1-scale", type=float, default=1.0, help="J1 강성 배율 — 좌우 모드 주파수를 옮겨 보는 여유 확인용(주파수는 대략 배율의 제곱근에 비례)")
 ap.add_argument("--mit", default="", help="관절 1–3을 MIT 모드 모형으로: pd / tde / asmc16 (비우면 엔코더 재생·유지)"); ap.add_argument("--mit-tdc", default="2", help="추종층을 거는 관절")
@@ -100,6 +102,16 @@ if a.gui:
         set_camera_view(eye=[XB + 0.9, -1.7, 0.75 + ZP], target=[XB + 0.1, 0.0, 0.3 + ZP])
     except Exception as e:  # noqa: BLE001
         print("카메라·조명 설정 건너뜀:", e)
+RCAM = None
+if a.rec:
+    import cv2
+    from pxr import UsdLux
+    from isaacsim.sensors.camera import Camera
+    from isaacsim.core.utils.viewports import set_camera_view
+    UsdLux.DomeLight.Define(sim.stage, "/World/dome").CreateIntensityAttr(900.0)
+    RCAM = Camera(prim_path="/World/reccam", resolution=(960, 540))
+    _v = [float(x) for x in a.rec_view.split(",")] if a.rec_view else [0.15, -3.3, 1.15 + ZP, 0.15, 0.0, 0.52 + ZP]   # 베이스를 따라가는 옆 시점(x는 베이스 기준)
+    REC_EYE, REC_TGT = _v[:3], _v[3:]
 sim.world.reset(); sim._apply_gains(); sim.set_state(POSE_A)
 for _ in range(2500):
     sim.step(POSE_A, np.zeros(6), wheel_w=np.zeros(4), steer=np.zeros(4))
@@ -190,6 +202,11 @@ def run(case):
         elif RQ is not None: sim.step(RQ[k_], RV[k_], **W40)
         else: sim.step(POSE_A, Z6, **W40)
     dqff_last = np.zeros(6); vff = np.zeros(6); ERR = None; TAPK = np.zeros(3)
+    VW = None; HP = np.zeros(3); DEV = []
+    if RCAM is not None:
+        RCAM.initialize(); set_camera_view(eye=REC_EYE, target=REC_TGT, camera_prim_path="/World/reccam")
+        for _ in range(12): sim.world.render()
+        VW = cv2.VideoWriter(f"{a.rec}_{case}.mp4", cv2.VideoWriter_fourcc(*"mp4v"), 25.0, (960, 540))
     Ta_ = a.v / 1.0; Tc_ = (XB + 0.9 - a.v * Ta_) / a.v; bz_ = a.bshape == "zvd" or "bz" in tok; BI = shaper("zvd", a.bsf, 0.10) if bz_ else [(1.0, 0.0)]
 
     def vprof(tt):
@@ -296,6 +313,15 @@ def run(case):
         else:
             q, w_ = POSE_A + dq, np.zeros(6)
         sim.step(q, w_, wheel_w=np.full(4, vc / WHEEL_R), steer=np.zeros(4))
+        if VW is not None:
+            HP += (TE[i - 1] - HP) * (DT / 0.08) if i > 0 else 0.0           # 2 Hz 아래는 따라가게 해서 빠른 성분만 남긴다(화면 표시용)
+            if i % 40 == 0:
+                DEV.append(float(np.linalg.norm(TE[i - 1] - HP)) * 1000.0 if i > 0 else 0.0)
+                xb_ = (XBASE[i - 1] if i > 0 else 0.0)
+                set_camera_view(eye=[REC_EYE[0] + xb_, REC_EYE[1], REC_EYE[2]], target=[REC_TGT[0] + xb_, REC_TGT[1], REC_TGT[2]], camera_prim_path="/World/reccam")
+                sim.world.render(); im = RCAM.get_rgba()
+                if im is not None and getattr(im, "size", 0):
+                    VW.write(cv2.cvtColor(np.ascontiguousarray(im[:, :, :3]), cv2.COLOR_RGB2BGR))
         if a.gui and i % 20 == 0:
             sim.world.render(); lag_ = i * DT * a.slow - (time.time() - tw0)
             if lag_ > 0: time.sleep(lag_)
@@ -309,6 +335,8 @@ def run(case):
         p = np.asarray(sim.bb.get_world_poses()[0])[0]; XBASE[i] = p[0]
         if x0 is None: x0 = p[0]
     tf = t_f if t_f is not None else (XB - LWB / 2) / a.v; tr = tf + LWB / a.v
+    if VW is not None:
+        VW.release(); np.savez(f"{a.rec}_{case}.npz", dev=np.array(DEV), fps=25.0, tf=tf, tr=tr, label=a.rec_label, case=case)
 
     def rms(t0, t1):
         m = (t >= t0) & (t < t1)
