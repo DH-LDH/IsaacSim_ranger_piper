@@ -166,6 +166,18 @@ KICKS = [(int(k_.split(",")[0]) - 1, math.radians(float(k_.split(",")[1])), floa
 SAT = [0, 0]
 
 
+NPT = 40
+
+
+def fit_pred(a6, d):
+    """베이스 가속도 6성분마다 d 스텝 앞을 내다보는 선형 예측기: a(t) ≈ Σ_k w_k·a(t − d − k), k = 0..NPT−1 (능형 회귀). 반환 (6, NPT)"""
+    W = np.zeros((6, NPT)); n_ = len(a6)
+    for c in range(6):
+        y = a6[d + NPT - 1:, c]; X = np.stack([a6[NPT - 1 - k:n_ - d - k, c] for k in range(NPT)], axis=1)
+        W[c] = np.linalg.solve(X.T @ X + 1e-3 * np.trace(X.T @ X) / NPT * np.eye(NPT), X.T @ y)
+    return W
+
+
 def clipj(j, v):
     """되먹임 보정 한 관절의 토크 한계: K_j·|Δq| <= tau_clip"""
     SAT[1] += 1
@@ -204,7 +216,10 @@ if a.replay:
 
 def run(case):
     tok = case.split("+")
-    ffd = next((int(t[2:]) for t in tok if t.startswith("ff") and t != "ffservo"), None)
+    ffp = next((int(t[3:]) for t in tok if t.startswith("ffp")), None)      # ffpN: N ms 늦게 들어온 베이스 가속도를 선형 예측기로 N ms 앞당겨 쓴다(예측기는 LIB의 파형으로 맞춤)
+    ffl = next((int(t[3:]) for t in tok if t.startswith("ffl")), None)      # fflN: 같은 것을 미분 한 항으로 앞당김(a + N·da/dt)
+    PW = fit_pred(LIB[1], ffp) if ffp is not None and LIB is not None else None
+    ffd = next((int(t[2:]) for t in tok if t.startswith("ff") and t != "ffservo" and not t.startswith(("ffp", "ffl"))), None)
     servo = "ffservo" in tok
     prev = next((t for t in tok if t.startswith("prev")), None)
     pz = bool(prev and prev.startswith("prevz"))                      # prevz: 상하·끄덕임 성분만 예측하고 나머지는 잰 값(ffN)을 쓴다
@@ -285,6 +300,12 @@ def run(case):
             dq += FF @ am
         elif in_rear:
             dq += FF @ (FLIP * rec[i - i_rear])                        # 뒷바퀴: 기억해 둔 것을 지연 없이
+        elif PW is not None:
+            hist = np.array(abuf[-NPT - ffp:len(abuf) - ffp])[::-1]              # 늦게 들어온 값의 최근 NPT개(가장 새 것이 앞)
+            dq += FF @ np.einsum("ck,kc->c", PW, hist)
+        elif ffl is not None:
+            a0_, a1_ = abuf[-1 - ffl], abuf[-1 - ffl - 4]
+            dq += FF @ (a0_ + (ffl / 1000.0) * (a0_ - a1_) / (4 * DT))
         elif ffd is not None:
             dq += FF @ abuf[-1 - ffd]
         elif servo and not mp_servo:
