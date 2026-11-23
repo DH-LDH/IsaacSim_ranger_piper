@@ -8,10 +8,10 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 H = os.path.dirname(os.path.abspath(__file__)); O = H + "/out"; CAM = 1.27
 # KRoC 양식: 그림 안 글자는 본문과 같은 9.5 pt, 300 dpi 이상·1,000 픽셀 이상.
-# 그림을 "원고에 넣는 크기 그대로" 만든다(W1·W2 mm) — 넣을 때 줄이거나 키우면 글자 크기가 달라진다. 글꼴은 Times New Roman과 폭이 같은 Liberation Serif.
+# 그림을 "원고에 넣는 크기 그대로" 만든다(W1·W2 mm) — 넣을 때 줄이거나 키우면 글자 크기가 달라진다. 글꼴은 본문의 영문 글꼴인 Times New Roman(없으면 폭이 같은 Liberation Serif로 바꿔 쓴다).
 W1, H1, W2, H2, DPI = 48.0, 39.0, 80.0, 50.0, 600
 MM = 1 / 25.4
-plt.rcParams.update({"font.size": 9.5, "font.family": "Liberation Serif", "mathtext.fontset": "stix", "axes.labelsize": 9.5, "xtick.labelsize": 9.5, "ytick.labelsize": 9.5, "legend.fontsize": 9.5,
+plt.rcParams.update({"font.size": 9.5, "font.family": "Times New Roman", "mathtext.fontset": "stix", "axes.labelsize": 9.5, "xtick.labelsize": 9.5, "ytick.labelsize": 9.5, "legend.fontsize": 9.5,
                      "axes.grid": True, "grid.alpha": 0.3, "axes.linewidth": 0.6, "xtick.major.pad": 2, "ytick.major.pad": 2, "axes.labelpad": 2})
 
 # ---- Fig. 1: 실측 대 모형(엔코더 재생), 18조건. 표식의 뜻은 캡션에 적는다(5: 원, 10: 네모, 15 deg/s: 세모) ----
