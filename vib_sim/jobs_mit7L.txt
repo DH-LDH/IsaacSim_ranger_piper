@@ -1,0 +1,10 @@
+m7L A_z_a3_110709 --file /home/da/piper_ws/docs/data/raw/line/20261124_110709_traj_line_z30_asmc3.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 8.52,20 --qd-noise 0.01
+m7L A_x_a3_110952 --file /home/da/piper_ws/docs/data/raw/line/20261124_110952_traj_line_x20_asmc3.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 8.52,20 --qd-noise 0.01
+m7L A_z_a23_111135 --file /home/da/piper_ws/docs/data/raw/line/20261124_111135_traj_line_z30_asmc23.csv.gz --ctrl asmc16 --tdc-joints 2,3 --win 8.51,20 --qd-noise 0.01
+m7L A_x_a23_111317 --file /home/da/piper_ws/docs/data/raw/line/20261124_111317_traj_line_x20_asmc23.csv.gz --ctrl asmc16 --tdc-joints 2,3 --win 8.51,20 --qd-noise 0.01
+m7L A_z_pd_111524 --file /home/da/piper_ws/docs/data/raw/line/20261124_111524_traj_line_z30_pd.csv.gz --ctrl pd --win 8.51,20
+m7L A_x_pd_112403 --file /home/da/piper_ws/docs/data/raw/line/20261124_112403_traj_line_x20_pd.csv.gz --ctrl pd --win 8.52,20
+m7L H_z_a23_133048 --file /home/da/piper_ws/docs/data/raw/line/20261124_133048_traj_line_z30_H_asmc23.csv.gz --ctrl asmc16 --tdc-joints 2,3 --win 8.52,20 --qd-noise 0.01
+m7L H_x_a23_133334 --file /home/da/piper_ws/docs/data/raw/line/20261124_133334_traj_line_x20_H_asmc23.csv.gz --ctrl asmc16 --tdc-joints 2,3 --win 8.53,20 --qd-noise 0.01
+m7L H_z_a3_133622 --file /home/da/piper_ws/docs/data/raw/line/20261124_133622_traj_line_z30_H_asmc3.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 8.52,20 --qd-noise 0.01
+m7L H_x_a3_133902 --file /home/da/piper_ws/docs/data/raw/line/20261124_133902_traj_line_x20_H_asmc3.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 8.52,20 --qd-noise 0.01

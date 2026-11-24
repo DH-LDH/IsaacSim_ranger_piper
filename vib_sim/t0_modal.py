@@ -7,12 +7,12 @@ import os
 import sys
 
 import numpy as np
-from vibsim import POSE_A, POSE_B, VibSim, HERE
+from vibsim import POSE_A, POSE_B, POSE_H, VibSim, HERE
 
 payload = float(sys.argv[1]) if len(sys.argv) > 1 else 0.0
 os.makedirs(HERE + "/out", exist_ok=True)
 sim = VibSim(base="fixed", K=np.full(6, 1.0e5), D=np.full(6, 1.0e3), payload=payload)
-for name, pose in (("A", POSE_A), ("B", POSE_B)):
+for name, pose in (("A", POSE_A), ("B", POSE_B), ("H", POSE_H)):   # H = 그리퍼가 앞을 보는 자세(11/24 추가)
     sim.set_state(pose)
     sim.settle(0.3)
     q = sim.q_link()

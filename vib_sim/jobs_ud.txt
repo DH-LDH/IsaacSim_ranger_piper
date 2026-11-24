@@ -1,0 +1,6 @@
+ud_a3 none,dampRJ,ff10,prevzE10+ff10+dampRJ,map+dampRJ,bz,bz+prevzE10+ff10+dampRJ --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+ud_pos none,dampRJ,ff10,prevzE10+ff10+dampRJ,map+dampRJ,bz,bz+prevzE10+ff10+dampRJ --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+ud_a3r none --still --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+ud_posr none --still --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+ud_pd none --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit pd --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz
+ud_pdr none --still --mit pd --replay /home/da/piper_ws/docs/data/raw/scn/20261029_110051_slow_j2_s1.csv.gz

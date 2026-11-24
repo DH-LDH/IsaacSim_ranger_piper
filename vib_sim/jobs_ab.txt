@@ -1,0 +1,18 @@
+ab_base_s1 - --mit-tdc 1,2,3
+ab_fr0_s1 - --mit-tdc 1,2,3 --Fs 0,0,0 --Fc 0,0,0
+ab_td1_s1 - --mit-tdc 1,2,3 --Td 1
+ab_j23_s1 - --mit-tdc 2,3
+ab_rate_s1 MIT_RATE=10,MIT_STEP=0.001 --mit-tdc 1,2,3
+ab_all_s1 MIT_RATE=10,MIT_STEP=0.001 --mit-tdc 1,2,3 --Fs 0,0,0 --Fc 0,0,0 --Td 1
+ab_base_s2 - --mit-tdc 1,2,3
+ab_fr0_s2 - --mit-tdc 1,2,3 --Fs 0,0,0 --Fc 0,0,0
+ab_td1_s2 - --mit-tdc 1,2,3 --Td 1
+ab_j23_s2 - --mit-tdc 2,3
+ab_rate_s2 MIT_RATE=10,MIT_STEP=0.001 --mit-tdc 1,2,3
+ab_all_s2 MIT_RATE=10,MIT_STEP=0.001 --mit-tdc 1,2,3 --Fs 0,0,0 --Fc 0,0,0 --Td 1
+ab_base_s3 - --mit-tdc 1,2,3
+ab_fr0_s3 - --mit-tdc 1,2,3 --Fs 0,0,0 --Fc 0,0,0
+ab_td1_s3 - --mit-tdc 1,2,3 --Td 1
+ab_j23_s3 - --mit-tdc 2,3
+ab_rate_s3 MIT_RATE=10,MIT_STEP=0.001 --mit-tdc 1,2,3
+ab_all_s3 MIT_RATE=10,MIT_STEP=0.001 --mit-tdc 1,2,3 --Fs 0,0,0 --Fc 0,0,0 --Td 1

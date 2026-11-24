@@ -16,7 +16,7 @@ from joint_ctrl import JointCtrl, JointCtrlCfg  # noqa: E402
 
 JM = [0, 1, 2]
 RATIO = np.array([3.65, 3.8, 3.5])            # 전류 토크 eff → N·m (J1은 가정)
-TAU_LIM = np.array([4.0, 5.0, 4.0, 4.0, 4.0, 4.0]); STEP = 0.063; RATE = 0.3
+TAU_LIM = np.array([4.0, 5.0, 4.0, 4.0, 4.0, 4.0]); STEP = float(os.environ.get("MIT_STEP", 0.063)); RATE = float(os.environ.get("MIT_RATE", 0.3))   # 환경 변수는 요인을 하나씩 꺼 보는 시험용
 
 
 def add_args(ap):

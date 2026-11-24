@@ -1,0 +1,11 @@
+ln_y_a3 none,dampRJ,ff10,prevzE10+ff10+dampRJ,map+dampRJ,bz,bz+prevzE10+ff10+dampRJ --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_y30.csv.gz
+ln_y_pd none --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit pd --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_y30.csv.gz
+ln_y_pdr none --still --mit pd --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_y30.csv.gz
+ln_x_a3r none --still --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_x20.csv.gz
+ln_x_a3 none,dampRJ,ff10,prevzE10+ff10+dampRJ,map+dampRJ,bz,bz+prevzE10+ff10+dampRJ --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_x20.csv.gz
+ln_x_pd none --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit pd --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_x20.csv.gz
+ln_x_pdr none --still --mit pd --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_x20.csv.gz
+ln_z_a3r none --still --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_z30.csv.gz
+ln_z_a3 none,dampRJ,ff10,prevzE10+ff10+dampRJ,map+dampRJ,bz,bz+prevzE10+ff10+dampRJ --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit asmc16 --mit-tdc 1,2,3 --qd-noise 0.01 --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_z30.csv.gz
+ln_z_pd none --fbp 2 --tau-clip 0.48 --tau-step 0.20 --tau-share 0.44 --mit pd --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_z30.csv.gz
+ln_z_pdr none --still --mit pd --replay /home/da/isaacsim/ros2_ws_ranger_piper/vib_sim/lines/line_z30.csv.gz

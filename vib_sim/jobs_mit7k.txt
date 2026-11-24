@@ -1,0 +1,15 @@
+m5k a3_153724_n1 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_153724_sine.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 4.12,22.0 --qd-noise 0.01
+m5k a3_154956_n1 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_154956_sine.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 4.12,22.0 --qd-noise 0.01
+m5k a3_155202_n1 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_155202_sine.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 4.12,22.0 --qd-noise 0.01
+m5k a1_153928_n1 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_153928_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m5k a1_154739_n1 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_154739_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m5k a1_155343_n1 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_155343_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.01
+m5k a3_153724_n3 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_153724_sine.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 4.12,22.0 --qd-noise 0.03
+m5k a3_154956_n3 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_154956_sine.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 4.12,22.0 --qd-noise 0.03
+m5k a3_155202_n3 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_155202_sine.csv.gz --ctrl asmc16 --tdc-joints 1,2,3 --win 4.12,22.0 --qd-noise 0.03
+m5k a1_153928_n3 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_153928_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m5k a1_154739_n3 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_154739_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m5k a1_155343_n3 --file /home/da/piper_ws/docs/data/raw/s1118/20261118_155343_sine.csv.gz --ctrl asmc16 --tdc-joints 2 --win 4.12,22.0 --qd-noise 0.03
+m6k pd_144251 --file /home/da/piper_ws/docs/data/raw/s1123/20261123_144251_sine_s3_pd.csv.gz --ctrl pd --win 4.12,22.0
+m6k pd_144442 --file /home/da/piper_ws/docs/data/raw/s1123/20261123_144442_sine_s3_pd.csv.gz --ctrl pd --win 4.12,22.0
+m6k pd_144619 --file /home/da/piper_ws/docs/data/raw/s1123/20261123_144619_sine_s3_pd.csv.gz --ctrl pd --win 4.12,22.0

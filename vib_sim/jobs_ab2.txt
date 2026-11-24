@@ -1,0 +1,6 @@
+ab_acc_s1 - --mit-tdc 1,2,3 --ff-acc
+ab_j23acc_s1 - --mit-tdc 2,3 --ff-acc
+ab_acc_s2 - --mit-tdc 1,2,3 --ff-acc
+ab_j23acc_s2 - --mit-tdc 2,3 --ff-acc
+ab_acc_s3 - --mit-tdc 1,2,3 --ff-acc
+ab_j23acc_s3 - --mit-tdc 2,3 --ff-acc
