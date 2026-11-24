@@ -68,6 +68,7 @@ POSE_H = np.radians([-0.3, 121.1, -73.2, 1.6, -30.0, 13.7])   # 자세 A에서 �
 # 앞의 값으로 돌리려면 환경 변수 VIBSIM_K=old. (그때의 결과는 out/Kold_1124, figs/Kold_1124)
 K_OLD_1122 = np.array([200.0, 881.0, 5704.0, 3000.0, 27.0, 3000.0])
 DEFAULT_K = K_OLD_1122.copy() if os.environ.get("VIBSIM_K", "") == "old" else np.array([200.0, 1100.0, 500.0, 3000.0, 800.0, 3000.0])
+if "," in os.environ.get("VIBSIM_K", ""): DEFAULT_K = np.array([float(v) for v in os.environ["VIBSIM_K"].split(",")])   # 민감도 시험용: VIBSIM_K=200,1100,500,3000,60,3000
 DEFAULT_ZETA = 0.10          # 자세 A 실측 감쇠비 0.09–0.13
 DEFAULT_F1 = 7.0
 DEFAULT_D = DEFAULT_K * 2 * DEFAULT_ZETA / (2 * math.pi * DEFAULT_F1)   # 강성 비례 감쇠: 1차 모드에서 zeta
