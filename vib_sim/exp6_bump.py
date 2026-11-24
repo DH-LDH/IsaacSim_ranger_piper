@@ -111,10 +111,10 @@ if a.gui:
         print("카메라·조명 설정 건너뜀:", e)
 MK = None
 if a.mag > 0:
-    MK = []
+    MK = []; MKS = []
     for _nm, _col in (("mk_ref", (0.1, 0.75, 0.2)), ("mk_mag", (0.9, 0.1, 0.1))):
         _sp = UsdGeom.Sphere.Define(sim.stage, "/World/" + _nm); _sp.CreateRadiusAttr(0.014); _sp.CreateDisplayColorAttr([Gf.Vec3f(*_col)])
-        MK.append(UsdGeom.Xformable(_sp).AddTranslateOp())
+        MK.append(UsdGeom.Xformable(_sp).AddTranslateOp()); MKS.append(_sp)
 VIZ = {"p0": None, "xb0": 0.0, "off": np.zeros(3)}
 
 
@@ -221,6 +221,8 @@ if a.replay:
 
 def run(case):
     tok = case.split("+")
+    if a.gui: print(f"\n>>> 지금 조건: {case}  ({'대책 없음 — 벗어난 양 표식은 빨강' if case == 'none' else '대책 있음 — 벗어난 양 표식은 파랑'})", flush=True)
+    if MK is not None: MKS[1].GetDisplayColorAttr().Set([Gf.Vec3f(0.9, 0.1, 0.1) if case == "none" else Gf.Vec3f(0.1, 0.35, 0.95)])   # 화면에서 조건을 가르는 단서: 대책 없음 = 빨강, 대책 있음 = 파랑
     ffp = next((int(t[3:]) for t in tok if t.startswith("ffp")), None)      # ffpN: N ms 늦게 들어온 베이스 가속도를 선형 예측기로 N ms 앞당겨 쓴다(예측기는 LIB의 파형으로 맞춤)
     ffl = next((int(t[3:]) for t in tok if t.startswith("ffl")), None)      # fflN: 같은 것을 미분 한 항으로 앞당김(a + N·da/dt)
     PW = fit_pred(LIB[1], ffp) if ffp is not None and LIB is not None else None
