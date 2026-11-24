@@ -73,6 +73,7 @@ ap.add_argument("--mag", type=float, default=0.0, help="끝단에 표식 둘을 
 ap.add_argument("--cam", default="", help="베이스를 따라가며 끝단을 가까이서 본다: side(옆) / rear(뒤). --gui·--rec 둘 다에 적용")
 ap.add_argument("--rec", default="", help="녹화: 조건마다 <이 값>_<조건>.mp4 와 끝단 흔들림 시계열(.npz)을 남긴다. 화면 없이 돌려도 된다(VIBSIM_USD=1 필요)")
 ap.add_argument("--rec-view", default="", help="카메라 \"ex,ey,ez,tx,ty,tz\" (비우면 경로 전체가 보이는 옆 시점)"); ap.add_argument("--rec-label", default="", help="영상 왼쪽 위에 적을 말(조건 이름 앞)")
+ap.add_argument("--vslow", type=float, default=0.0, help="0보다 크면 턱(패인 곳)을 넘는 구간에서만 이 속도[m/s]로 줄인다(--stop 필요): 앞바퀴가 닿기 --slow-m 앞에서 감속을 끝내고 뒷바퀴가 지난 뒤 --slow-m 에서 다시 가속. 지형을 미리 안다고 본 경우"); ap.add_argument("--slow-m", type=float, default=0.12)
 ap.add_argument("--ff-acc", action="store_true", help="MIT에서 미리 넣는 보정의 가속도도 추종 제어기의 기준 가속도에 더한다(지금까지는 위치·속도만) — 추종 제어기가 보정을 외란으로 보고 되돌리지 않게")
 ap.add_argument("--ff-tau", action="store_true", help="MIT에서 미리 넣는 보정을 위치 기준뿐 아니라 토크에도 같이 넣는다: τ_ff += K·Δq / G (스프링이 전해야 할 토크를 PD가 아니라 τ_ff가 낸다)")
 ap.add_argument("--k1-scale", type=float, default=1.0, help="J1 강성 배율 — 좌우 모드 주파수를 옮겨 보는 여유 확인용(주파수는 대략 배율의 제곱근에 비례)")
@@ -279,6 +280,9 @@ def run(case):
         if u < 2 * Ta_ + Tc_: return a.v - (u - Ta_ - Tc_)
         return 0.0
     T = (0.1 + 2 * Ta_ + Tc_ + 0.3 + a.tail) if a.stop else (0.3 + (XB + 0.3 + 0.5) / a.v + 2.0)
+    VS = a.vslow if (a.vslow > 0 and a.stop and not a.still) else 0.0; VX = VS if VS > 0 else a.v      # VX = 턱을 넘을 때의 속도(뒷바퀴가 넘을 시각 계산에 쓴다)
+    XS0, XS1 = XB - LWB / 2 - a.slow_m, XB + LWB / 2 + a.slow_m; DDEC = max(0.0, (a.v ** 2 - VS ** 2) / 2.0) if VS > 0 else 0.0; vcs = 0.0
+    if VS > 0: T += (XS1 - XS0 + DDEC) * (1.0 / VS - 1.0 / a.v) + 1.0
     n = int(T * sim.hz); t = np.arange(n) * DT; TE = np.zeros((n, 3)); te_ = np.zeros(3); OFF_ = None
     ERR = np.zeros((n, 3))
     G = np.zeros((n, 3)); XBASE = np.zeros(n); DQ = np.zeros((n, 6)); A6 = np.zeros((n, 6)); EV = np.zeros((n, 3)); BV = np.zeros((n, 6))
@@ -290,6 +294,10 @@ def run(case):
     lp_lag = 1.0 / (2 * math.pi * a.lp)       # 저역 통과가 더하는 지연(대략)
     for i in range(n):
         vc = sum(ai * vprof(t[i] - ti) for ai, ti in BI)
+        if VS > 0:                                                     # 자리에 따라 목표 속도를 정하고 1 m/s^2로 따라간다: 출발 → 턱 앞에서 감속 → 넘은 뒤 가속 → 정지
+            xr_ = (XBASE[i - 1] - x0) if i > 0 else 0.0
+            vt_ = 0.0 if (t[i] < 0.1 or xr_ >= XB + 0.9 - vcs ** 2 / 2.0) else (VS if XS0 - DDEC <= xr_ < XS1 else a.v)
+            vcs += float(np.clip(vt_ - vcs, -1.0 * DT, 1.0 * DT)); vc = vcs
         lv, av = sim.base_vel(); v6 = np.r_[lv, av]
         a6 = (v6 - v_prev) / DT if i > 0 else np.zeros(6); v_prev = v6
         af = af + al * (a6 - af); abuf.append(af.copy()); abuf.pop(0)
@@ -304,7 +312,7 @@ def run(case):
         if t_f is None and xrel + LWB / 2 >= XB - 0.06:                # 앞바퀴가 턱(홈)에 닿기 직전 — 위치로 잡는다
             t_f = t[i]; rec = [b.copy() for b in abuf[-30:]]          # 30 ms 앞부터 기억
             recp = [b.copy() for b in pbuf[-30:]]
-            i_rear = i + int(round((LWB / a.v + perr / 1000.0) / DT)) - 30
+            i_rear = i + int(round((LWB / VX + perr / 1000.0) / DT)) - 30
         elif t_f is not None and len(rec) < 700:
             rec.append(af.copy()); recp.append(d6.copy())
         in_rear = prev is not None and i_rear is not None and 0 <= i - i_rear < len(rec)
@@ -420,7 +428,7 @@ def run(case):
         _bp, _bq = sim.bb.get_world_poses(); p = np.asarray(_bp)[0]; XBASE[i] = p[0]
         if a.keep: BP[i] = p; BQ[i] = np.asarray(_bq)[0]; EP[i] = np.asarray(sim.ee.get_world_poses()[0])[0]; QD[i] = RQREF[ii] if RQREF is not None else POSE_A
         if x0 is None: x0 = p[0]
-    tf = t_f if t_f is not None else (XB - LWB / 2) / a.v; tr = tf + LWB / a.v
+    tf = t_f if t_f is not None else (XB - LWB / 2) / a.v; tr = tf + LWB / VX
     if VW is not None:
         VW.release(); np.savez(f"{a.rec}_{case}.npz", dev=np.array(DEV), fps=25.0, tf=tf, tr=tr, label=a.rec_label, case=case)
 
@@ -469,7 +477,7 @@ def run(case):
                **{f"err_j{j + 1}": float(np.degrees(np.std(ERR[mf, j]))) for j in range(3)}, **{f"errm_j{j + 1}": float(np.degrees(np.mean(ERR[mf, j]))) for j in range(3)},
                n_ratelim=arm.nlim if arm is not None else 0, **{f"slip_j{j + 1}": (float(arm.nslip[j]) / max(1, arm.k) if arm is not None else float("nan")) for j in range(3)})
     if a.keep:
-        np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, te=TE, tf=tf, tr=tr, ep=EP, bp=BP, bq=BQ, qd=QD, xbase=XBASE, d6=D6, mf=mf)
+        np.savez(HERE + f"/out/exp6_ts_{a.tag}_{case}.npz", t=t, gyro=G, dq=DQ, a6=A6, ev=EV, bv=BV, te=TE, tf=tf, tr=tr, ep=EP, bp=BP, bq=BQ, qd=QD, xbase=XBASE, d6=D6, mf=mf, vcmd=BV[:, 0])
     return row
 
 
