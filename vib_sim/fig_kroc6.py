@@ -64,7 +64,7 @@ def series(tag, case):
     pr = np.array([fk(S.CH, q) for q in z["qd"][::5]]); dref = np.repeat((pr - pr[0]) @ S.RM.T, 5, axis=0)[:len(t)]
     d = dref[np.argmax(np.linalg.norm(dref, axis=1))]; d = d / np.linalg.norm(d)
     w = (z["ep"] - z["ep"][0]) - dref; w[:, :2] -= (z["bp"] - z["bp"][0])[:, :2]
-    return t, np.linalg.norm(S.perp(w, d), axis=1) * 1e3, float(z["tf"]), float(z["tr"])
+    return t, np.linalg.norm(w, axis=1) * 1e3, float(z["tf"]), float(z["tr"])      # 3차원 전체 거리(11/24: 직선에 수직인 성분만 보던 것에서 바꿈)
 
 # ---- Fig. 3: 자세 B, 위아래 직선, 턱 10 mm ----
 fig, ax = plt.subplots(figsize=(80 * MM, 36 * MM), layout="constrained")
@@ -83,7 +83,7 @@ def mean(pre, k, case, key, still=False):
 G = [("rl", "z", "A, V"), ("rl", "x", "A, F"), ("rlH", "z", "B, V"), ("rlH", "x", "B, F")]
 B = [("rest", "At rest", "#d9d9d9"), ("none", "No comp.", "#999999"), ("kinmap", "(b)", "#5b9bd5"), (PROP, "(b) + (c)", "#1f4e79")]
 fig, ax = plt.subplots(1, 2, figsize=(80 * MM, 44 * MM), layout="constrained")
-for a_, key, yl in ((ax[0], "w_pk", "Peak [mm]"), (ax[1], "w_rms", "RMS [mm]")):
+for a_, key, yl in ((ax[0], "d3_pk", "Peak [mm]"), (ax[1], "d3_rms", "RMS [mm]")):
     for i, (pre, k, _) in enumerate(G):
         for j, (case, lab, c) in enumerate(B):
             a_.bar(i + (j - 1.5) * 0.2, mean(pre, k, case, key, still=(case == "rest")), 0.2, color=c, zorder=3, label=lab if i == 0 else None)

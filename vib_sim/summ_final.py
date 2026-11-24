@@ -12,21 +12,21 @@ def seeds(pre, k, m, c):
     x = [S.one(f"{pre}_{k}_{m}_base", c), S.one(f"{pre}_{k}_{m}_base_s1", c)] + [S.one(f"{pre}_{k}_{m}_base_s{sd}", c) for sd in (2, 3)]
     return [r for r in x if r]
 md = ["# 끝단 직선 중 출발 → 턱·패인 바닥 → 정지 — 두 자세 (2026-11-24, 시뮬레이션, 관절 강성 1100·500·800)", "",
-      "월드 기준으로 직선에서 벗어난 거리[mm]. 실측 직선 기록을 재생(위치 제어 = 위치 모드 기록, 토크 제어 = 추종 제어기 기록의 관절 4–6과 기준). 베이스 자세는 참값. 기본 조건 밖은 한 번씩.", ""]
+      "끝단이 있어야 할 자리에서 떨어진 거리(월드 기준, 3차원 전체)[mm] — 베이스의 수평 이동은 빼고 들림·기울기는 넣는다. 직선에 수직인 성분만 본 앞의 표는 figs/final_1124_cross.md. 실측 직선 기록을 재생(위치 제어 = 위치 모드 기록, 토크 제어 = 추종 제어기 기록의 관절 4–6과 기준). 베이스 자세는 참값. 기본 조건 밖은 한 번씩.", ""]
 for pre, pn in (("rl", "자세 A"), ("rlH", "그리퍼가 앞을 보는 자세")):
     for k, kn in (("z", "위아래 직선 ±30 mm"), ("x", "팔 앞뒤 직선 ±20 mm")):
         md += [f"## {pn} — {kn}", "", "| 구동 | 베이스 정지: 실효값 | 흔들림 | 최대 |", "|---|---|---|---|"]
         for m in ("pos", "a3", "j23"):
             st = S.one(f"{pre}_{k}_{m}_still", "none")
-            if st: md.append(f"| {MN[m]} | {st['w_rms']:.2f} | {st['w_vib']:.2f} | {st['w_pk']:.2f} |")
+            if st: md.append(f"| {MN[m]} | {st['d3_rms']:.2f} | {st['d3_vib']:.2f} | {st['d3_pk']:.2f} |")
         md += ["", "턱 10 mm·0.3 m/s (씨앗마다), 최대 / 실효값:", "", "| 구동 | " + " | ".join(CN) + " |", "|" + "---|" * (len(CN) + 1)]
         for m in ("pos", "a3", "j23"):
             cells = []
             for c in C:
-                x = seeds(pre, k, m, c); cells.append(("·".join(f"{r['w_pk']:.1f}" for r in x) + " / " + "·".join(f"{r['w_rms']:.2f}" for r in x)) if x else "—")
+                x = seeds(pre, k, m, c); cells.append(("·".join(f"{r['d3_pk']:.1f}" for r in x) + " / " + "·".join(f"{r['d3_rms']:.2f}" for r in x)) if x else "—")
             md.append(f"| {MN[m]} | " + " | ".join(cells) + " |")
         md.append("")
-        for key, lab in (("w_pk", "최대"), ("w_rms", "실효값"), ("w_vib", "흔들림(2–20 Hz)")):
+        for key, lab in (("d3_pk", "최대"), ("d3_rms", "실효값"), ("d3_vib", "흔들림(2–20 Hz)")):
             md += [f"### {lab} [mm] — 여섯 조건", "", "| 구동 | 조건 | " + " | ".join(CN) + " |", "|" + "---|" * (len(CN) + 2)]
             for m in ("pos", "j23"):
                 A = []

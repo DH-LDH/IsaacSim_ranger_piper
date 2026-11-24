@@ -35,7 +35,9 @@ def one(tag, case):
     pk = lambda V: float(np.max(np.linalg.norm(V[m], axis=1))) * 1e3
     vib = lambda V: float(np.sqrt(sum(np.mean(band(V[:, c], fs, 2.0, 20.0)[m] ** 2) for c in range(3)))) * 1e3
     tf, tr = float(z["tf"]), float(z["tr"])
-    return dict(arm_rms=rms(cp), arm_pk=pk(cp), arm_vib=vib(cp), arm_along=float(np.sqrt(np.mean((te @ d)[m] ** 2))) * 1e3, w_rms=rms(cw), w_pk=pk(cw), w_vib=vib(cw),
+    ax = {f"{c}_rms": float(np.sqrt(np.mean(w[m, i] ** 2))) * 1e3 for i, c in enumerate("xyz")}; ax.update({f"{c}_pk": float(np.max(np.abs(w[m, i]))) * 1e3 for i, c in enumerate("xyz")})
+    # d3_* = 3차원 전체 거리(끝단이 있어야 할 자리에서 떨어진 거리) — 11/24부터 원고의 주 지표. w_* = 직선에 수직인 성분만(앞의 지표). x·y·z = 월드 축별(x 진행 방향, y 옆, z 위아래)
+    return dict(arm_rms=rms(cp), arm_pk=pk(cp), arm_vib=vib(cp), arm_along=float(np.sqrt(np.mean((te @ d)[m] ** 2))) * 1e3, w_rms=rms(cw), w_pk=pk(cw), w_vib=vib(cw), d3_rms=rms(w), d3_pk=pk(w), d3_vib=vib(w), along_rms=float(np.sqrt(np.mean((w @ d)[m] ** 2))) * 1e3, **ax,
                 heave=float(np.max(np.abs(z["bp"][m, 2] - z["bp"][0, 2]))) * 1e3, tf=tf, tr=tr)
 
 
