@@ -25,6 +25,8 @@ AMR이 등속으로 가다가 바닥의 턱(높이 --h, 길이 3 cm, 앞바퀴 �
             Δq = −J_v^-1 (dz + ω × r),  dz·ω = 베이스의 들림·기울기(출발 때 대비), r = 베이스에서 끝단까지. N = 베이스 자세를 아는 지연[ms] (kin0 = 지연 없이 정확히 앎)
             kinmap = 같은 턱을 미리 넘어 본 자세를 위치의 함수로 앎(지형 예견),  kinprev = 앞바퀴가 넘을 때 잰 자세를 뒷바퀴 몫으로(끄덕임 부호만 뒤집음), 앞바퀴 구간은 10 ms 늦은 값
             이 보정을 켠 조건에서는 tip_err_mm 등 '기준 궤적 대비' 지표가 보정 자체를 오차로 센다 — 월드 기준(summ_line.py)으로 본다.
+  tfbNkG[c] 끝단 위치 피드백(11/24 시험): 바깥의 센서(레이저·카메라)가 끝단의 월드 위치 오차 e를 잰다고 보고, 관절 1–3의 위치 기준을 적분으로 고친다.
+            Δq_fb ← Δq_fb − G · J_v^-1 e(t − N ms) · dt   (G [1/s] = 고리의 세기, 대역은 대략 G / 2π Hz).  끝에 c 를 붙이면 30 Hz 표본(카메라), 없으면 1 kHz(레이저)
 --mit pd|tde|asmc16: 관절 1–3의 모터 쪽을 엔코더 재생·유지 대신 MIT 모드 모형(mitarm.py: 펌웨어 PD + τ_ff + 마찰, 추종층은 실기 joint_ctrl)으로 굴린다.
             기준은 --replay 기록의 qref(없으면 자세 유지), 관절 4–6은 그대로 재생. 이때 미리 넣는 보정(ff·prev·map)은 위치 기준에 더해 보내고,
             끝단 되먹임(damp)은 링크에 바로 닿는 토크로 넣는다(스프링 목표를 τ/K만큼 옮김 — 실기 처프에서 엔코더는 안 움직이는데 끝단이 응답한 것에 맞춘 꼴).
@@ -237,6 +239,8 @@ def run(case):
     mp_servo = mp == "mapservo"; servo = servo or mp_servo
     dmp = next((t for t in tok if t.startswith("damp")), None)
     kin = next((t for t in tok if t.startswith("kin")), None)        # 베이스 자세 보상
+    tfb = next((t for t in tok if t.startswith("tfb")), None); dqfb = np.zeros(3); e_hold = np.zeros(3)      # 끝단 위치 피드백
+    if tfb: _b = tfb[3:].rstrip("c").split("k"); tfb_d, tfb_g, tfb_cam = int(_b[0]), float(_b[1]), tfb.endswith("c")
     kdel = int(kin[3:]) if kin and kin[3:].isdigit() else 0; PB0 = RB0 = JV3 = None; pbuf = [np.zeros(6)] * NB; recp = []; D6 = None
     dr = dmp[5:] if dmp and dmp.startswith("dampR") else None        # 감쇠만 더하기: 모드 주파수의 공진기(대역 통과)를 거친 되먹임
     if dr is not None:
@@ -340,6 +344,9 @@ def run(case):
             else: dk = pbuf[-1 - kdel]
             rt_ = np.asarray(sim.ee.get_world_poses()[0])[0].astype(float) - pb_
             dq[:3] -= np.linalg.solve(JV3, np.array([0.0, 0.0, dk[2]]) + np.cross(dk[3:], rt_))
+        if tfb is not None and JV3 is not None and i > tfb_d + 1:      # 끝단 위치 피드백: 늦게 들어온 월드 위치 오차로 관절 1–3의 기준을 조금씩 고친다
+            if (not tfb_cam) or i % 33 == 0: e_hold = TW[i - 1 - tfb_d].copy()
+            dqfb = np.clip(dqfb - tfb_g * np.linalg.solve(JV3, e_hold) * DT, -0.06, 0.06); dq[:3] += dqfb
         dq_ff = dq.copy()                                              # 여기까지가 미리 넣는 보정, 아래는 끝단 되먹임
         if dd is not None:                                             # 끝단 자이로 되먹임 감쇠
             s0 = gbuf[-1 - dd]; s1 = gbuf[-1 - dd - 4]; ds = (s0 - s1) / (4 * DT)
