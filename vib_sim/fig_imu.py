@@ -62,7 +62,7 @@ def build(layout):
         ax.add_patch(Circle(o, 0.0085, fc="white", ec=CI, lw=1.1, zorder=8)); ax.add_patch(Circle(o, 0.0028, fc=CI, ec=CI, zorder=9))
         txt(o[0] + dy[0] - 0.012, o[1] + dy[1] + 0.016, "$y_I$", CI); txt(o[0] + dz[0] - 0.022, o[1] + dz[1] - 0.006, "$z_I$", CI); txt(o[0] + 0.022, o[1] + 0.016, "$x_I$", CI); txt(o[0] + 0.012, o[1] - 0.022, "{I}", CI, ha="left")
         ax.add_patch(Circle(E, 0.0045, fc=CE, ec="white", lw=0.5, zorder=7)); ax.plot([E[0], E[0] - 0.04], [E[1], E[1] - 0.03], color="k", lw=0.4, zorder=7); txt(E[0] - 0.045, E[1] - 0.04, "{E}", CE, ha="right")
-        txt(0.335, 0.262, "camera", ha="left"); ax.plot([0.385, o[0] + 0.012], [0.252, o[1] + 0.03], color="k", lw=0.5, zorder=7)
+        txt(0.335, 0.262, "IMU", ha="left"); ax.plot([0.385, o[0] + 0.012], [0.252, o[1] + 0.03], color="k", lw=0.5, zorder=7)
         ax.set_xlim(*XL); ax.set_ylim(*YL)
     if "b" in R:
         # ---- (b) 처리 순서 ----

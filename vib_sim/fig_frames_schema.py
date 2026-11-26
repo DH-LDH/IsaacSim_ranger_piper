@@ -2,11 +2,13 @@
   2col    → figs/kroc_frames_schema.png (170 × 106 mm, 두 단: (a)(b)(c))
   1col_ac → figs/kroc_frames_schema_1col_ac.png (80 × 118 mm, 한 단: 옆 + 팔의 평면)
   1col_c  → figs/kroc_frames_schema_1col_c.png (80 × 56 mm, 한 단: 팔의 평면만)
+  1col_abc → figs/kroc_frames_schema_1col_abc.png (80 × 170 mm, 한 단: 세 칸을 위아래로)
+  1col_ab → figs/kroc_frames_schema_1col_ab.png (80 × 111 mm, 한 단: 옆 + 위)
 박사님이 예로 주신 논문(Pham, Weon, Lee, IJCAS 2020, Fig. 1)처럼 3D 모델에서 뽑은 흑백 선 그림 위에 좌표축·중심선·치수선·질량 중심 기호를 얹는다.
 형상: AgileX Ranger Mini 3.0, PiPER의 공개 3D 형상(robot_render.lineart가 윤곽·모서리 선을 뽑는다), 손목 카메라는 상자.
 (a) x–z 평면(옆)   (b) x–y 평면(위)   (c) y–z 평면(앞에서 본 팔의 평면)
 팔 베이스의 위치는 시뮬레이션과 같은 앞뒤·좌우 값을 3.0 상판 위에 둔 것이다(실물 장착 위치는 실물이 와야 정해진다).
-실행: ~/nonmoon/.venv_pptx/bin/python fig_frames_schema.py [2col|1col_ac|1col_c|all]   (기본 2col)"""
+실행: ~/nonmoon/.venv_pptx/bin/python fig_frames_schema.py [2col|1col_ac|1col_c|1col_abc|1col_ab|all]   (기본 2col)"""
 import math, os, sys
 import numpy as np
 import matplotlib
@@ -125,7 +127,8 @@ def draw_c(ax, full=True, legend=None):
 
 def build(layout):
     global fig
-    FW, FH, name = {"2col": (170.0, 106.0, "kroc_frames_schema"), "1col_ac": (80.0, 118.0, "kroc_frames_schema_1col_ac"), "1col_c": (80.0, 56.0, "kroc_frames_schema_1col_c")}[layout]
+    FW, FH, name = {"2col": (170.0, 106.0, "kroc_frames_schema"), "1col_ac": (80.0, 118.0, "kroc_frames_schema_1col_ac"), "1col_c": (80.0, 56.0, "kroc_frames_schema_1col_c"),
+                    "1col_abc": (80.0, 170.0, "kroc_frames_schema_1col_abc"), "1col_ab": (80.0, 111.0, "kroc_frames_schema_1col_ab")}[layout]
     fig = plt.figure(figsize=(FW * MM, FH * MM))
     def panel(rect, x0, x1, y0, cap):
         """rect = (왼쪽, 아래, 폭, 높이)[그림 비율]. 가로 범위와 아래 끝을 주면 세로 범위는 칸의 모양에 맞춘다(축척이 가로세로 같게)"""
@@ -137,6 +140,11 @@ def build(layout):
         draw_c(panel((0.448, 0.060, 0.549, 0.930), -0.32, 0.70, GZ - 0.10, "(c) For the $y$–$z$ plane (arm plane, seen from the front)"))
     elif layout == "1col_ac":
         draw_a(panel((0.005, 0.565, 0.99, 0.430), -0.74, 0.82, GZ - 0.19, "(a) For the $x$–$z$ plane")); draw_c(panel((0.005, 0.070, 0.99, 0.425), -0.32, 0.70, -0.16, "(b) For the $y$–$z$ plane (arm plane, from the front)"), full=False, legend=(0.54, -0.125))
+    elif layout in ("1col_abc", "1col_ab"):
+        mm = lambda l, b, w, h: (l / FW, b / FH, w / FW, h / FH)                                         # 칸을 mm로 준다
+        ya = FH - 0.6 - 50.7; yb = ya - 8.0 - 45.0                                                       # (a) 79.2 × 50.7 mm, (b) 55.25 × 45.0 mm (두 단 판과 같은 축척)
+        draw_a(panel(mm(0.4, ya, 79.2, 50.7), -0.74, 0.82, GZ - 0.19, "(a) For the $x$–$z$ plane")); draw_b(panel(mm(12.4, yb, 55.25, 45.0), -0.58, 0.56, -0.42, "(b) For the $x$–$y$ plane"))
+        if layout == "1col_abc": draw_c(panel(mm(0.4, yb - 8.0 - 50.2, 79.2, 50.2), -0.32, 0.70, -0.16, "(c) For the $y$–$z$ plane (arm plane, from the front)"), full=False, legend=(0.54, -0.125))
     else:
         draw_c(panel((0.005, 0.005, 0.99, 0.99), -0.32, 0.70, -0.19, ""), full=False, legend=(0.54, -0.155))
     os.makedirs(H + "/figs", exist_ok=True); fig.savefig(f"{H}/figs/{name}.png", dpi=DPI); plt.close(fig); print("→", f"{H}/figs/{name}.png")
@@ -144,4 +152,4 @@ def build(layout):
 
 if __name__ == "__main__":
     which = sys.argv[1] if len(sys.argv) > 1 else "2col"
-    for lay in (("2col", "1col_ac", "1col_c") if which == "all" else (which,)): build(lay)
+    for lay in (("2col", "1col_ac", "1col_c", "1col_abc", "1col_ab") if which == "all" else (which,)): build(lay)

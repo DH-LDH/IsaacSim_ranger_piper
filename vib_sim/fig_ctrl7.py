@@ -19,7 +19,7 @@ def line(pts, ls="-"):
 def summ(x, y):
     ax.add_patch(Circle((x, y), 1.5, fc="w", ec="k", lw=0.6)); ax.text(x, y, "+", ha="center", va="center", fontsize=8)
 yt, ym, ya = 37.0, 22.0, 5.5
-box(57.0, yt, 22.0, 7.5, "Mobile base", GY); box(3.0, yt, 35.0, 7.5, "Rear-wheel prediction", BL)
+box(57.0, yt, 22.0, 7.5, "Mobile base", GY); box(3.0, yt, 35.0, 7.5, os.environ.get("PRED_LABEL", "Rear-wheel prediction"), BL)
 arr((57.0, yt + 3.75), (38.0, yt + 3.75)); ax.text(47.5, yt + 4.6, r"$\delta z,\,\delta\varphi,\,\mathbf{a}_b$", ha="center", va="bottom", fontsize=9.5)
 box(3.0, ym, 37.0, 8.0, r"(b) $-\mathbf{J}^{-1}(\delta z\,\hat{\mathbf{z}}+\delta\varphi\times\mathbf{r}_e)$", OR)
 box(43.0, ym, 21.0, 8.0, r"(c) $\mathbf{K}^{-1}\mathbf{N}\,\mathbf{a}_P$", OR)
@@ -33,4 +33,4 @@ arr((7.5, ys), (11.0, ys)); box(11.0, ya, 21.0, 7.5, "(a) Tracking\ncontrol, J2-
 arr((32.0, ys), (35.5, ys)); box(35.5, ya, 16.5, 7.5, "Built-in\nPD, motor", GY)
 arr((52.0, ys), (55.5, ys)); box(55.5, ya, 23.5, 7.5, "Elastic joints,\nlinks", GY)
 arr((68.0, yt), (68.0, ya + 7.5), ls=(0, (3, 2))); ax.text(69.3, 26.0, "base\nmotion", ha="left", va="center", fontsize=8.5, linespacing=0.9)
-fig.savefig(H + "/figs/kroc7_ctrl.png", dpi=800); print("→ figs/kroc7_ctrl.png")
+SUF = os.environ.get("OUT_SUFFIX", ""); fig.savefig(H + f"/figs/kroc7_ctrl{SUF}.png", dpi=800); print(f"→ figs/kroc7_ctrl{SUF}.png")
